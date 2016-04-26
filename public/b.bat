@@ -1,0 +1,1 @@
+../node_modules/.bin/babel -w -d dest src
