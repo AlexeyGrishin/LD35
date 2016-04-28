@@ -33,7 +33,7 @@ class Field {
                 if (isHero(cell)) {
                     this.heroCoords = {x: ci, y: ri};
                 } else if (types[cell.toLowerCase()]) {
-                    let fig = new Figure(types[cell.toLowerCase()], {x: ci, y: ri, side: color(cell)});
+                    let fig = new Figure(types[cell.toLowerCase()], {x: ci, y: ri, color: color(cell)});
                     this.figures.push(fig);
                 }
 
@@ -52,7 +52,6 @@ class Field {
 
     isEmpty(x,y) { return this.get(x,y) === false; }
 
-    //TODO: side hero/white - different fields maybe?
     canStepInto(x, y, mySide) {
         let cell = this.get(x,y);
         return cell == false || (cell != null && cell.side != mySide);

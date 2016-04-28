@@ -6,7 +6,7 @@ function addIfEmpty(field, x, y, res) {
     return false;
 }
 
-function addIfCanStep(field, x, y, side, figure, res, beats) {
+function addIfCanStep(field, x, y, side, isHero, figure, res, beats) {
     if (field.canStepInto(x, y, side)) {
         let r = {x,y};
         let c = field.get(x,y);
@@ -16,7 +16,7 @@ function addIfCanStep(field, x, y, side, figure, res, beats) {
         }
         if (beats && beats.length) {
             r.beats = beats;
-            if (side == 'hero') {
+            if (isHero) {
                 let lastBeaten = r.beats[r.beats.length-1];
                 if (lastBeaten && lastBeaten.figure !== figure) {
                     r.morphTo = lastBeaten.figure;
@@ -29,15 +29,15 @@ function addIfCanStep(field, x, y, side, figure, res, beats) {
     return false;
 }
 
-function getMovesFor({x,y,side,figure}, field, checks) {
+function getMovesFor({x,y,side,figure,isHero}, field, checks) {
     var res = [];
     for (let {dx,dy} of checks) {
         var finished = false;
         var tx = x+dx, ty = y+dy;
         var beats = [];
         while (!finished) {
-            addIfCanStep(field, tx, ty, side, figure, res, beats);
-            if (side == 'hero') {
+            addIfCanStep(field, tx, ty, side, isHero, figure, res, beats);
+            if (isHero) {
                 finished = field.get(tx, ty) === null;
             } else {
                 finished = !field.isEmpty(tx, ty);
@@ -49,24 +49,24 @@ function getMovesFor({x,y,side,figure}, field, checks) {
     return res;
 }
 
-function getMovesForExact({x,y,side, figure}, field, checks) {
+function getMovesForExact({x,y,side, figure, isHero}, field, checks) {
     var res = [];
     for (let {dx,dy} of checks) {
         var tx = x+dx, ty = y+dy;
-        addIfCanStep(field, tx, ty, side, figure, res);
+        addIfCanStep(field, tx, ty, side, isHero, figure, res);
     }
     return res;
 }
 
 exports.Rules = {
         pawn: {
-            getMoves: function ({x, y, side, figure}, field) {
-                if (side == 'hero') { throw "!!!";}
+            getMoves: function ({x, y, side, figure, isHero, color}, field) {
+                if (isHero) { throw "!!!";}
                 var res = [];
-                let dy = side == 'white' ? -1 : +1;
+                let dy = color == 'white' ? -1 : +1;
                 addIfEmpty(field, x, y+dy, res);
-                addIfCanStep(field, x+1, y+dy, side, figure, res);
-                addIfCanStep(field, x-1, y+dy, side, figure, res);
+                addIfCanStep(field, x+1, y+dy, side, isHero, figure, res);
+                addIfCanStep(field, x-1, y+dy, side, isHero, figure, res);
                 return res;
             }
         },

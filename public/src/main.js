@@ -5,190 +5,75 @@ let {Figure, FigureDrawer} = require('./chess_figure');
 let {Rules} = require('./chess_rules');
 let {Font} = require('gamejs/font');
 let {figure, pixel, cell, figureInCell, PIX_SIZE, time, CELL_SIZE} = require('./consts');
+let {loops, WAITING} = require('./loops');
+let {levels} = require('./levels');
+let {Background} = require('./facets');
+let {t} = require('./lang');
 
-class MessageLoop {
-    constructor(state, message) {
-        this.state = state;
-        this.state.message = message;
-    }
-
-    loop(ms) {
-        if (pressed[gamejs.event.K_SPACE]) {
-            this.next();
-        }
-    }
-
-    click() {
-        this.next();
-    }
-
-    next() {
-        this.state.message = null;
-        this.state.next();
-    }
+var bgSurfaces = [];
+let BGS = 100;
+for (var i = 0; i < BGS; i++) {
+    bgSurfaces.push(new gamejs.graphics.Surface([800,800]));
 }
-
-class NullLoop {
-    constructor(state) {
-        console.log("null");
-    }
-
-    loop(ms) {}
-
-    click() {}
-}
-
-let MOVE = "move";
-let WAITING = "waiting";
-let MOVED = "moved";
-let MORPHING = "morphing";
-
-class GamingLoop {
-    constructor(state, controllerIdx, stopCondition) {
-        this.state = state;
-        this.controllerIdx = controllerIdx;
-        this.stopCondition = stopCondition;
-        this.state.phase = MOVE;
-    }
-
-    loop(ms) {
-        if (this.state.hasAnimations) {
-            if (this.state.controller) {
-                let mf = this.state.controller.moving;
-                let moves = this.state.controller.possibleFields;
-                for (let f of this.state.level.figures.filter((f) => f.isAlive)) {
-                    if (mf == f) continue;
-                    let t = moves.find((m) => m.x == f.x && m.y == f.y);
-                    let dx = f.x - mf.x;
-                    let dy = f.y - mf.y;
-                    if (t && t.beats.indexOf(f) != -1 && (dx*dx+dy*dy) < 1) {
-                        f.smashed();
-                    }
-                }
-            }
-            return;
+var fieldSurface = new gamejs.graphics.Surface([800,800]);
+var uiSurface = new gamejs.graphics.Surface([800,800]);
+//let bgSurface = new gamejs.graphics.Surface([800,800]);
+for (var x = 0; x < 10; x++) {
+    for (var y = 0; y < 10; y++) {
+        let color = parseInt(Background.find((p) => p.x == x && p.y == y).color.split(",")[1]);
+        let direction = Math.random() < 0.5 ? -1 : 1;
+        let factor = 0.1;
+        let bootstrap = Math.floor((1/factor)*Math.random());
+        for (var i = 0; i < BGS;i++) {
+            let ii = (bootstrap + i) % BGS;
+            let icolor = Math.round(color + direction * ((BGS/2 - Math.abs(ii-BGS/2))) * factor);
+            graphics.rect(bgSurfaces[i], "rgb(" + [icolor,icolor,icolor].join(",") + ")", new gamejs.Rect(x*80,y*80,80,80), 0);
         }
-        if (this.state.phase == MORPHING) {
-            this.state.controller.morph();
-            this.state.controller.recalculate();
-            this.state.phase = WAITING;
-        }
-        if (this.state.phase == MOVED) {
-            if (this.stopCondition()) {
-                this.state.controller = null;
-                this.state.phase = null;
-                return;
-            }
-            this.controllerIdx = (this.controllerIdx + 1) % this.state.level.controllers.length;
-        }
-        if (this.state.phase == WAITING) {
-            return;
-        }
-        let controller = this.state.level.controllers[this.controllerIdx];
-        this.state.controller = controller;
-        if (controller.isHero()) {
-            controller.recalculate();
-            this.state.phase = WAITING;
-        } else {
-            controller.performMove();
-            this.state.phase = MOVED;
-        }
-
-
-    }
-
-    click(pos) {
-        let controller = this.state.level.controllers[this.controllerIdx];
-        if (this.state.phase != WAITING || !controller.isHero()) return;
-        let cx = Math.floor(pos[0] / CELL_SIZE / PIX_SIZE);
-        let cy = Math.floor(pos[1] / CELL_SIZE / PIX_SIZE);
-        if (!controller.performMove(cx, cy)) return;
-        if (!controller.canMoveAgain()) {
-            this.state.phase = MOVED;
-        } else {
-            this.state.phase = MORPHING;
-        }
-    }
-}
-
-class ActionLoop {
-    constructor(state, action) {
-        this.state = state;
-        this.action = action;
-    }
-
-    loop() {
-        this.action();
-        this.state.next();
     }
 }
 
 class GameState {
     constructor() {
-        this.startLevel({field: [
-            "..R.....",
-            ".*......",
-            "......g.",
-            "........",
-            "...BR...",
-            "........",
-            "........",
-            "......K.",
-        ],
-            controllers: [
-                (level) => new UserController(level.field, HeroState),
-                (level) => new AIController("White", level.field, (f) => f.side == 'white' && f.figure != 'pawn'),
-                (level) => new AIController("Black", level.field, (f) => f.side == 'black'),
-            ],
-            scenario: (level, game) => {
-                return [
-                    () => new MessageLoop(game, "Test message"),
-                    () => new GamingLoop(game, 0, () => {
-                        console.log(level.hero);
-                        if (level.hero.y == 0) {
-                            game.next();
-                            return true;
-                        }
-
-                    }),
-                    () => new MessageLoop(game, "After first cycle"),
-                    () => new ActionLoop(game, () => {
-                        HeroState.side = 'hero';
-                        level.hero.side = 'hero';
-                        level.hero.morph('queen');
-                    }),
-                    () => new GamingLoop(game, 0, () => {
-                        if (!level.field.figures.some((f) => f.side == 'black' && f.isAlive)) {
-                            game.win();
-                            return true;
-                        }
-                    })
-                ];
-            }
-        })
+        this.pressed = {};
+        this.loops = loops(this);
+        this.startLevel(levels.level1);
+        this.bgIdx = 0;
+        this.bgPass = 0;
+        this.bgChanged = true;
     }
 
     startLevel(level) {
         this.subloop = null;
         this.level = new Level(level);
-
         this.scenario = this.level.scenario(this);
         this.next();
+        this.updateUi();
+        fieldSurface.clear();
     }
 
     get subloop() { return this._subloop;}
 
     set subloop(val) {
         this._subloop = val;
-        console.log(val);
     }
 
     next() {
         this.subloop = this.scenario.shift()();
     }
 
-    win() {
-        this.subloop = new NullLoop(this);
+    win(nextLevel) {
+        HeroState.savedPawns += this.level.figures.filter((f) => f.isAlive && f.figure == 'pawn').length;
+        if (nextLevel) {
+            this.startLevel(nextLevel);
+        } else {
+            console.log("win");
+            this.subloop = this.loops.nothing(this);
+        }
+    }
+
+    loose() {
+        console.log("lost");
+        this.subloop = this.loops.nothing(this);
     }
 
     playAnimations(ms) {
@@ -199,15 +84,27 @@ class GameState {
     }
 
     loop(ms) {
+        this.bgPass += ms;
+        if (this.bgPass > 400) {
+            this.bgPass -= 400;
+            this.bgIdx = (this.bgIdx + 1) % BGS;
+            this.bgChanged = true;
+        }
         this.playAnimations(ms);
         if (this.subloop && this.subloop.loop) this.subloop.loop(ms);
     }
 
     click(pos) {
-        if (this.subloop && this.subloop.click) this.subloop.click(pos);
+        if (this.subloop && this.subloop.click) this.subloop.click([pos[0] - this.offsetX, pos[1] - this.offsetY]);
     }
 
     draw(surface) {
+        //draw background
+        if (this.bgChanged) {
+            surface.blit(bgSurfaces[this.bgIdx], null, null, 'copy');
+        }
+
+        //draw interface
         //draw field
         this.level.field.map.forEach((row, ri) => {
             row.forEach((fcell, ci) => {
@@ -225,34 +122,86 @@ class GameState {
                         }
                     }
                 }
-                graphics.rect(surface, color, new gamejs.Rect(cell(ci), cell(ri), CELL_SIZE*PIX_SIZE, CELL_SIZE*PIX_SIZE), 0);
+                graphics.rect(fieldSurface, color, new gamejs.Rect(cell(ci), cell(ri), CELL_SIZE*PIX_SIZE, CELL_SIZE*PIX_SIZE), 0);
             });
         });
         //draw figures
-        let drawer = new FigureDrawer(surface);
+        let drawer = new FigureDrawer(fieldSurface);
         this.level.figures.forEach((fig) => {
             drawer.draw(fig);
         });
         //draw messages
-        if (this.message) {
-            surface.blit(FONT.render(this.message, "red"), [0,0]);
+        if (this.messageShown) {
+            let [width, height] = MSG_FONT.size(this.messageShown);
+            let [fwidth, fheight] = MSG_FONT.size(this.message);
+            var pad = 5;
+            var x,y,colors;
+            if (this.messageFigure) {
+                x = cell(this.messageFigure.x) - width;
+                y = cell(this.messageFigure.y) - height;
+                if (cell(this.messageFigure.x) < fwidth) {
+                    x += width + cell(1);
+                }
+                if (cell(this.messageFigure.y) < fheight) {
+                    y += height + cell(1);
+                }
+
+                colors = {
+                    'white': {bg: 'white', fg: 'black'},
+                    'black': {bg: 'black', fg: 'white'},
+                    'hero': {bg: '#4400cc', fg: 'white'}
+                }[this.messageFigure.color];
+            } else {
+                x = cell(this.level.width/2) - fwidth/2;
+                y = cell(this.level.height/2) - fheight/2;
+                pad = 10;
+                colors = {bg: '#883333', fg: 'white'}
+            }
+
+            graphics.rect(fieldSurface, colors.bg, new gamejs.Rect(x, y, width+pad*2, height+pad*2), 0);
+            graphics.rect(fieldSurface, colors.fg, new gamejs.Rect(x, y, width+pad*2, height+pad*2), 2);
+            fieldSurface.blit(MSG_FONT.render(this.messageShown, colors.fg), [x+pad,y+pad-2]);
         }
+        this.offsetX = 400-cell(this.level.width)/2;
+        this.offsetY = 40;
+        surface.blit(fieldSurface, [this.offsetX, this.offsetY]);
+        graphics.rect(surface, 'brown', new gamejs.Rect(400-cell(this.level.width)/2-2, 40-2, cell(this.level.width)+4, cell(this.level.height)+4), 4);
+
+        surface.blit(uiSurface, 0, 0);
     }
+
+
+    updateUi() {
+        uiSurface.clear();
+        uiSurface.blit(UI_FONT.render(t(this.level.name), "yellow"), [5, 5]);
+        let s = t("Saved pawns: " + HeroState.savedPawns);
+        uiSurface.blit(UI_FONT.render(s, "yellow"), [800 - 5 - UI_FONT.size(s)[0], 5]);
+    }
+
 
 }
 
 var HeroState = {
     figure: 'pawn',
-    side: 'white',
+    color: 'white',
+    savedPawns: 0,
     rules: null//TODO
 };
 
 class Level {
     constructor(levelDescription) {
+        levelDescription.initState(HeroState);
+        this.name = levelDescription.name;
         this.field = new Field(levelDescription.field);
-        this.controllers = levelDescription.controllers.map((ctor) => ctor(this));
+        this.controllers = levelDescription.controllers({
+            user: () => new UserController(this.field, HeroState),
+            ai: (name, side, selector) => new AIController(name, this.field, selector, side)
+        });
         this.scenarioCtor = levelDescription.scenario;
     }
+
+    get width() { return this.field.width; }
+    get height() { return this.field.height; }
 
     get figures() {
         return this.field.figures;
@@ -262,8 +211,12 @@ class Level {
         return this.field.hero;
     }
 
+    find(figure, color) {
+        return this.figures.find((f) => f.isAlive && (figure === undefined || f.figure == figure) && (color === undefined || color == f.color))
+    }
+
     scenario(game) {
-        return this.scenarioCtor(this, game);
+        return this.scenarioCtor(this, game, game.loops);
     }
 }
 
@@ -287,7 +240,7 @@ class Controller {
 class UserController extends Controller {
     constructor(field, heroState) {
         super("Your", field);
-        this._hero = new Figure(heroState.figure, {side: heroState.side});
+        this._hero = new Figure(heroState.figure, {side: "hero", color: heroState.color});
         field.assignHero(this._hero);
         this.figures = [this.hero];
     }
@@ -297,7 +250,7 @@ class UserController extends Controller {
     recalculate() {
         this.possibleFields = Rules[this._hero.figure].getMoves(this._hero, this.field);
         this.moving = this._hero;
-        console.log(this.possibleFields);
+        //console.log(this.possibleFields);
     }
 
     getPossibleFields() {
@@ -308,13 +261,17 @@ class UserController extends Controller {
         let pm = this.possibleFields.find((p) => p.x == x && p.y == y);
         if (!pm) return false;
         this._hero.move({x,y,drawShlafe:true});
-        this.morphAfterMove = pm.morphTo;
-        //TODO: morph
+        if (pm.morphTo !== 'pawn') {
+            this.morphAfterMove = pm.morphTo;
+        } else {
+            this.morphAfterMove = null;
+        }
+
         return true;
     }
 
     canMoveAgain() {
-        return this.morphAfterMove && this._hero.side == 'hero';
+        return this.morphAfterMove && this._hero.isHero;
     }
 
     morph() {
@@ -323,9 +280,10 @@ class UserController extends Controller {
 }
 
 class AIController extends Controller {
-    constructor(name, field, selector) {
+    constructor(name, field, selector, side) {
         super(name, field);
         this.figures = field.figures.filter(selector);
+        this.figures.forEach((f) => f.side = side);
     }
 
     getPossibleFields() {
@@ -334,82 +292,87 @@ class AIController extends Controller {
 
     performMove() {
         let alive = this.figures.filter((f) => f.isAlive);
-        let f = alive[Math.floor(Math.random()*alive.length)];
-        let mvs = Rules[f.figure].getMoves(f, this.field);
-        this.possibleFields = mvs;
-        this.moving = f;
-        //console.log(f, mvs);
-        f.move(mvs[0]);
+        if (alive.length == 0) return;
+        let done = alive.find((a) => {
+            let mvs = Rules[a.figure].getMoves(a, this.field);
+            let move = mvs.find((m) => m.beats && m.beats.length > 0);
+            if (move) {
+                this.moving = a;
+                this.possibleFields = mvs;
+                a.move(move);
+                return true;
+            }
+            return false;
+        });
+        if (!done) {
+            let f = alive[Math.floor(Math.random()*alive.length)];
+            let mvs = Rules[f.figure].getMoves(f, this.field);
+            let move = mvs.find((m) => m.beats && m.beats.length > 0) || mvs[0];
+            this.possibleFields = mvs;
+            this.moving = f;
+            f.move(move);
+        }
     }
 
 }
 
-var pressed = {};
-let FONT = new Font('20px monospace');
+let MSG_FONT = new Font('italic 16px times new roman');
+let UI_FONT = new Font('18px helvetica');
 
 gamejs.ready(() => {
 
+    var game = new GameState();
+
     gamejs.event.onKeyDown((e) => {
-        pressed[e.key] = true;
+        game.pressed[e.key] = true;
     });
     gamejs.event.onKeyUp((e) => {
-        pressed[e.key] = false;
+        game.pressed[e.key] = false;
     });
-
     gamejs.event.onMouseDown((e) => {
         game.click(e.pos);
     });
-    var game = new GameState();
 
     gamejs.onTick((msDuration) => {
         let display = gamejs.display.getSurface();
-        display.clear();
-        //graphics.rect(display, "blue", new gamejs.Rect(10, 10, 20, 20));
+        //display.clear();
         game.loop(msDuration);
         game.draw(display);
     });
 });
 
 
-/*
-1. draw figure, movements, fighting - as in prototype
-2. add chess rules - how figures can walk, fight, etc
-3. add own rules - how hero can do the same
-4. control - highlight moves, morphs, etc.
-5. several small scenario-based puzzles
-6. free scrolling arena - support runaway troops.
-7. very little enemy AI
-8. graphics, fonts, music
-9. levels
-10. story
-
-?. switching levels
-
-! king
-
-
-Game
-
-  Level
-    Field
-    Figures
-    Controllers
-        //depending on scenario
-        HeroController
-    Scenario
-        Events
-
-
-Loop
-  render
-  events->controller
-  collisions->controller
-
-
- */
 
 /*
+TODO: different rules on differnt stages
+
 visual effects:
 - floor - generate facets. ruine them in holes, fill with blood on murder
 - wave for target cell
+
++ rules
+    + side --> color
+    + side == nr of controller
+    + alies/foes
+- floor
+    - facets
+    - ruine for holes
+    - blood
+- loosing screen
+- winning screen
+- interface (score, level)
+    + center level
+    + dark background
+    + level#, saved pawns
+    - hint
+    - highlight hero
+    - highlight moves
+- level switch (fade-in/fade-out, or something like that)
+    - idea: current level is exploding as broken mirror, next level appears under it
++ check condition after move
++ user alive-ness
+- real introduction
+- localization?
+- performance
+
  */

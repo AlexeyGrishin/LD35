@@ -49,13 +49,14 @@ function sign(x) {
 }
 
 class Figure {
-    constructor(figureName, {x, y, side}) {
+    constructor(figureName, {x, y, side, color}) {
         this.figure = figureName;
-        figure = Figures.get(figureName);
+        let figure = Figures.get(figureName);
         this.isAlive = true;
         this.x = x;
         this.y = y;
         this.side = side;
+        this.color = color;
         this._particles = figure2particles(figure).particles.sort((p1, p2) => {
             let order = ['border', 'body', 'heart'];
             return order.indexOf(p1.type) - order.indexOf(p2.type);
@@ -90,7 +91,7 @@ class Figure {
             }});
             return;
         }
-        let speed = this.side == 'hero' ? (Math.abs(tx-ox) + Math.abs(ty-oy) > 2 ? 0.6 : 0.4) : 0.5;
+        let speed = this.isHero ? (Math.abs(tx-ox) + Math.abs(ty-oy) > 2 ? 0.6 : 0.4) : 0.5;
         function isShlafe(p) { return p.type == 'shlafe';}
         function isntShlafe(p) { return p.type != 'shlafe';}
         this.view.action = (ms) => {
@@ -117,19 +118,26 @@ class Figure {
                 this.x = tx;
                 this.y = ty;
                 this.view.action = null;
-                this.view.animation = () => {
-                    this._particles.filter((p) => p.type == 'shlafe').forEach((p) => {
-                        p.ts--;
-                    });
-                    this._particles = this._particles.filter((p) => p.type != 'shlafe' || p.ts > 0);
-                    if (!this._particles.some((p) => p.type == 'shlafe')) {
-                        this.view.animation = null;
-                        if (afterMove) afterMove();
-                    }
-                };
+                if (afterMove) {
+                    afterMove();
+                } else {
+                    this.view.animation = () => {
+                        this._particles.filter((p) => p.type == 'shlafe').forEach((p) => {
+                            p.ts--;
+                        });
+                        this._particles = this._particles.filter((p) => p.type != 'shlafe' || p.ts > 0);
+                        if (!this._particles.some((p) => p.type == 'shlafe')) {
+                            this.view.animation = null;
+                        }
+                    };
+                }
             }
         }
 
+    }
+
+    get isHero() {
+        return this.color == 'hero';
     }
 
     smashed() {
@@ -276,25 +284,39 @@ function brigther(clr) {
 class FigureDrawer {
     constructor(surface) {
         this.surface = surface;
+        this._cached = {};
     }
 
-    draw(figure) {
-        figure._particles.forEach((p) => this.drawParticle(p, figure));
+    draw(cfigure) {
+        let key = cfigure.color + "_" + cfigure.figure + "_" + cfigure.isAlive;
+        if (!this._cached[key]) {
+            this._cached[key] = new gamejs.graphics.Surface([figure(1), figure(1)]);
+            cfigure._particles.forEach((p) => this.drawParticle(p, cfigure, this._cached[key]));
+        }
+        if (cfigure.view.animation == null && cfigure.view.action == null) {
+            this.surface.blit(this._cached[key], [figureInCell(cfigure.x), figureInCell(cfigure.y)]);
+            cfigure._particles.filter((p) => p.type == 'heart').forEach((p) => this.drawParticle(p, cfigure));
+        } else {
+            cfigure._particles.forEach((p) => this.drawParticle(p, cfigure));
+        }
     }
 
-    drawParticle({x,y,type}, figure) {
-        var clr = Colors.color[figure.side];
+    drawParticle({x,y,type}, figure, mySurface) {
+        var clr = Colors.color[figure.color];
         if (type == 'border') {
-            clr = Colors.border[figure.side];
+            clr = Colors.border[figure.color];
         }
         if (type == 'shlafe') {
             clr = brigther(clr);
         }
-        graphics.rect(this.surface, clr, new gamejs.Rect(figureInCell(figure.x) + pixel(x), figureInCell(figure.y) + pixel(y), PIX_SIZE, PIX_SIZE), 0);
+        if (!mySurface) {
+            graphics.rect(this.surface, clr, new gamejs.Rect(figureInCell(figure.x) + pixel(x), figureInCell(figure.y) + pixel(y), PIX_SIZE, PIX_SIZE), 0);
+        } else {
+            graphics.rect(mySurface, clr, new gamejs.Rect(pixel(x), pixel(y), PIX_SIZE, PIX_SIZE), 0);
+        }
         if (type == 'heart') {
             clr = 'rgb(' + figure._heartColor.toFixed(0) + ',0,0)';
             let r = PIX_SIZE*heartBeat[Math.floor(figure._heartPhase)]*(figure._heartColor/255);
-            //console.log(figure._heartPhase, r);
             graphics.circle(this.surface, clr, [figureInCell(figure.x) + pixel(x) + r/2, figureInCell(figure.y) + pixel(y) + r/2], r, 0);
         }
     }
