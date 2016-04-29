@@ -289,11 +289,11 @@ class FigureDrawer {
 
     draw(cfigure) {
         let key = cfigure.color + "_" + cfigure.figure + "_" + cfigure.isAlive;
-        if (!this._cached[key]) {
-            this._cached[key] = new gamejs.graphics.Surface([figure(1), figure(1)]);
-            cfigure._particles.forEach((p) => this.drawParticle(p, cfigure, this._cached[key]));
-        }
         if (cfigure.view.animation == null && cfigure.view.action == null) {
+            if (!this._cached[key]) {
+                this._cached[key] = new gamejs.graphics.Surface([figure(1), figure(1)]);
+                cfigure._particles.forEach((p) => this.drawParticle(p, cfigure, this._cached[key]));
+            }
             this.surface.blit(this._cached[key], [figureInCell(cfigure.x), figureInCell(cfigure.y)]);
             cfigure._particles.filter((p) => p.type == 'heart').forEach((p) => this.drawParticle(p, cfigure));
         } else {

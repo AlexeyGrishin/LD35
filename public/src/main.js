@@ -40,6 +40,7 @@ class GameState {
         this.bgIdx = 0;
         this.bgPass = 0;
         this.bgChanged = true;
+        this._drawer = new FigureDrawer(fieldSurface);
     }
 
     startLevel(level) {
@@ -101,7 +102,7 @@ class GameState {
     draw(surface) {
         //draw background
         if (this.bgChanged) {
-            surface.blit(bgSurfaces[this.bgIdx], null, null, 'copy');
+            surface.blit(bgSurfaces[this.bgIdx]);
         }
 
         //draw interface
@@ -126,9 +127,8 @@ class GameState {
             });
         });
         //draw figures
-        let drawer = new FigureDrawer(fieldSurface);
         this.level.figures.forEach((fig) => {
-            drawer.draw(fig);
+            this._drawer.draw(fig);
         });
         //draw messages
         if (this.messageShown) {
@@ -369,6 +369,7 @@ visual effects:
     - highlight moves
 - level switch (fade-in/fade-out, or something like that)
     - idea: current level is exploding as broken mirror, next level appears under it
+    - idea2: current level is exploding like facets falling (but reversed), next level is under
 + check condition after move
 + user alive-ness
 - real introduction
