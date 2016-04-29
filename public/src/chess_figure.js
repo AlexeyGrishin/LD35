@@ -64,7 +64,7 @@ class Figure {
         this._maxY = figure.length-1;
         this._cX = Math.floor(figure[0].length/2);
         this._heartColor = 255;
-        this._heartPhase = Math.floor(Math.random()*heartBeat.length);
+        this._heartPhase = Math.floor(Math.random()*(heartBeat.length-0.1));
 
         this.view = {
             action: null,
@@ -258,7 +258,7 @@ class Figure {
             this._heartColor *= 0.94;
         } else {
             this._heartPhase += time(ms);
-            if (this._heartPhase >= heartBeat.length) {
+            while (this._heartPhase >= heartBeat.length) {
                 this._heartPhase -= heartBeat.length;
             }
         }
@@ -317,6 +317,9 @@ class FigureDrawer {
         if (type == 'heart') {
             clr = 'rgb(' + figure._heartColor.toFixed(0) + ',0,0)';
             let r = PIX_SIZE*heartBeat[Math.floor(figure._heartPhase)]*(figure._heartColor/255);
+            if (isNaN(r)) {
+                console.log("r is NaN", figure._heartPhase, figure._heartColor,heartBeat[Math.floor(figure._heartPhase)]*(figure._heartColor/255) )
+            }
             graphics.circle(this.surface, clr, [figureInCell(figure.x) + pixel(x) + r/2, figureInCell(figure.y) + pixel(y) + r/2], r, 0);
         }
     }

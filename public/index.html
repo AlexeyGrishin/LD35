@@ -7,14 +7,33 @@
            color:#222;
            padding:0px;
         }
-        #gjs-canvas {
-            border: 1px solid #ccc;
+        #gjs-container {
             margin: 20px auto;
             box-shadow: 14px 10px 30px 0px rgba(50, 50, 50, 0.75);
             width: 800px;
             height: 800px;
+            position: relative;
+        }
+        #gjs-background {
+            width: 800px;
+            height: 800px;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #gjs-background .bg-cell {
+            position: absolute;
+            background: inherit;
+            width: 80px;
+            height: 80px;
+        }
+        #gjs-canvas {
+            width: 800px;
+            height: 800px;
+            border: 1px solid #ccc;
             /** automatically made visible once game is loaded **/
             display:none;
+            position: relative;
         }
         #gjs-loader {
             height: 100%;
@@ -22,6 +41,7 @@
             margin:0 auto;
         }
     </style>
+    <script src="https://code.jquery.com/jquery-2.2.3.min.js" integrity="sha256-a23g1Nt4dtEYOj7bR+vTu7+T8VP13humZFBJNIYoEJo=" crossorigin="anonymous"></script>
     <script src="./lib/yabble.js"></script>
     <script src="./lib/gamejs-2.0.1.js"></script>
     <script>
@@ -35,7 +55,11 @@
          <progress max=1 min=0 steps=0.1></progress>
          <br/>Loading...
         </div>
-        <canvas id="gjs-canvas"></canvas>
+        <div id="gjs-container">
+            <div id="gjs-background"></div>
+            <canvas id="gjs-canvas"></canvas>
+        </div>
+
     </div>
 </body>
 </html>

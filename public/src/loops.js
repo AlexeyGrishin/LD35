@@ -18,8 +18,8 @@ class MessageLoop {
 
     loop(ms) {
         this.passed += ms;
-        if (!this.isShownCompletely() && this.passed > 200) {
-            this.passed -= 200;
+        if (!this.isShownCompletely() && this.passed > 100) {
+            this.passed -= 100;
             let spIdx = this.state.message.indexOf(" ", this.state.messageShown.length+1);
             this.state.messageShown = spIdx == -1 ? this.state.message : this.state.message.substring(0, spIdx);
         }
@@ -68,6 +68,18 @@ class GamingLoop {
     }
 
     loop(ms) {
+        for (var xy in this.state.highlightMovement) {
+            if (this.state.highlightMovementTo == xy) {
+                this.state.highlightMovement[xy] += 0.1;
+            } else {
+                this.state.highlightMovement[xy] -= 0.1;
+            }
+            this.state.highlightMovement[xy] = Math.max(0, this.state.highlightMovement[xy]);
+            this.state.highlightMovement[xy] = Math.min(1, this.state.highlightMovement[xy]);
+            if (this.state.highlightMovement[xy] == 0) {
+                delete this.state.highlightMovement[xy];
+            }
+        }
         if (this.state.hasAnimations) {
             if (this.state.controller) {
                 let mf = this.state.controller.moving;
@@ -120,6 +132,20 @@ class GamingLoop {
         }
 
 
+    }
+
+    move(pos) {
+        let controller = this.state.level.controllers[this.controllerIdx];
+        if (this.state.phase != WAITING || !controller.isHero()) return;
+        let cx = Math.floor(pos[0] / CELL_SIZE / PIX_SIZE);
+        let cy = Math.floor(pos[1] / CELL_SIZE / PIX_SIZE);
+        if (controller.canMoveTo(cx, cy)) {
+            this.state.highlightMovement = this.state.highlightMovement || {};
+            this.state.highlightMovement[cx + "_" + cy] = this.state.highlightMovement[cx + "_" + cy] || 0.1;
+            this.state.highlightMovementTo = cx + "_" + cy;
+        } else {
+            this.state.highlightMovementTo = null;
+        }
     }
 
     click(pos) {

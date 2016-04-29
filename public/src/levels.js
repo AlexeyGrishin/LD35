@@ -8,8 +8,8 @@ function blackAi(s, heroAlly = false) {
 }
 
 let level2 = {
-    name: 'Level 2',
-    field: [
+        name: 'Level 2',
+        field: [
             "...R.",
             ".....",
             "..*..",
@@ -17,24 +17,26 @@ let level2 = {
             ".....",
             ".pppp"
         ],
-        initState: (heroState) => {
+        initState: (heroState, levelState) => {
             if (heroState.figure === 'pawn') {
                 heroState.figure = 'bishop';
             }
             heroState.color = 'hero'; //TODO
+            levelState.startDialog = true;
             //TODO: modify rules
         },
         controllers: (s) => [s.user(), whiteAi(s), blackAi(s)],
-        scenario: (level, game, s) => [
-            s.message("Ha-ha-ha, die stupid pawns", level.find('knight', 'black')),
-            s.message("No, please!", level.find('pawn', 'white')),
-            s.gaming(0, () => {
-                if (!level.find(undefined, 'black')) {
-                    game.win();
-                    return true;
-                }
-            })
-        ]
+        scenarioCallback: (level, game, levelState) => () => {
+            if (levelState.startDialog) {
+                game.showMessage("Ha-ha-ha, die stupid pawns", level.find('knight', 'black'));
+                game.showMessage("No, please!", level.find('pawn', 'white'));
+                levelState.startDialog = false;
+            }
+            if (!level.find(undefined, 'black')) {
+                game.win();
+                return true;
+            }
+        }
     }
 ;
 
@@ -45,40 +47,55 @@ let level1 = {
         ".*......",
         "......g.",
         "........",
-        "...BR...",
+        "........",
+        //"...BR...",
         "........",
         "........",
-        "......K.",
+        ".K......",
     ],
-    initState: (heroState) => {
+    initState: (heroState, levelState) => {
         heroState.figure = 'pawn';
         heroState.color = 'white';
+        levelState.event = 'started';
     },
     controllers: (s) => [
         s.user(),
         s.ai("White", "hero", (f) => f.color == 'white' && f.figure != 'pawn'),
         s.ai("Black", "black", (f) => f.color == 'black')
     ],
-    scenario: (level, game, s) => [
-        s.message("Test message"),
-        s.gaming(0, () => {
-            if (level.hero.y == 0) {
-                game.next();
-                return true;
-            }
-        }),
-        s.message("After first cycle", level.hero),
-        s.action(() => {
-            level.hero.color = 'hero';
-            level.hero.morph('queen');
-        }),
-        s.gaming(0, () => {
-            if (!level.find(undefined, 'black')) {
-                game.win(level2);
-                return true;
-            }
-        })
-    ]
+    scenarioCallback: (level, game, levelState) => () => {
+        switch (levelState.event) {
+            case 'started':
+                game.showMessage("Test message");
+                levelState.event = 'waitForMorph';
+                break;
+            case 'waitForMorph':
+                if (level.hero.y == 0) {
+                    game.showMessage("After first cycle", level.hero);
+                    level.hero.color = 'hero';
+                    level.hero.morph('queen');
+                    levelState.event = 'morphed';
+                }
+                break;
+            case 'morphed':
+                if (!levelState.rook && !level.find('rook', 'black')) {
+                    game.showMessage("Killed rook", level.hero);
+                    game.showMessage("Well done!", level.find('king', 'white'));
+                    levelState.rook = true;
+                }
+                if (!levelState.bishop && !level.find('bishop', 'black')) {
+                    game.showMessage("Killed bishop", level.hero);
+                    game.showMessage("Well done!", level.find('king', 'white'));
+                    levelState.bishop = true;
+                }
+                if (!level.find(undefined, 'black')) {
+                    game.win(level2);
+                    return true;
+                }
+                break;
+        }
+    }
+
 };
 
 exports.levels = {

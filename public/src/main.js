@@ -7,27 +7,80 @@ let {Font} = require('gamejs/font');
 let {figure, pixel, cell, figureInCell, PIX_SIZE, time, CELL_SIZE} = require('./consts');
 let {loops, WAITING} = require('./loops');
 let {levels} = require('./levels');
-let {Background} = require('./facets');
+let {Background, FacetedSurface, Facets, generateCell} = require('./facets');
 let {t} = require('./lang');
 
-var bgSurfaces = [];
-let BGS = 100;
-for (var i = 0; i < BGS; i++) {
-    bgSurfaces.push(new gamejs.graphics.Surface([800,800]));
-}
+let BGS = 50;
 var fieldSurface = new gamejs.graphics.Surface([800,800]);
 var uiSurface = new gamejs.graphics.Surface([800,800]);
-//let bgSurface = new gamejs.graphics.Surface([800,800]);
-for (var x = 0; x < 10; x++) {
-    for (var y = 0; y < 10; y++) {
-        let color = parseInt(Background.find((p) => p.x == x && p.y == y).color.split(",")[1]);
-        let direction = Math.random() < 0.5 ? -1 : 1;
-        let factor = 0.1;
-        let bootstrap = Math.floor((1/factor)*Math.random());
-        for (var i = 0; i < BGS;i++) {
-            let ii = (bootstrap + i) % BGS;
-            let icolor = Math.round(color + direction * ((BGS/2 - Math.abs(ii-BGS/2))) * factor);
-            graphics.rect(bgSurfaces[i], "rgb(" + [icolor,icolor,icolor].join(",") + ")", new gamejs.Rect(x*80,y*80,80,80), 0);
+
+function createCssBackground() {
+    let bg = $("#gjs-background");
+    var groups = {};
+    for (var x = 0; x < 10; x++) {
+        for (var y = 0; y < 10; y++) {
+            let bgcell = Background.find((p) => p.x == x && p.y == y);
+            let color = bgcell.color;
+            let direction = Math.random() < 0.5 ? -1 : 1;
+            let factor = 0.1;
+            let bootstrap = Math.floor((1 / factor) * Math.random());
+            let group = groups[bgcell.group] || (groups[bgcell.group] = {el: $("<div></div>").addClass("bg-group").attr("data-group", bgcell.group).appendTo(bg), colors: []});
+            if (group.colors.length == 0) {
+                for (var i = 0; i < BGS;i++) {
+                    let ii = (bootstrap + i) % BGS;
+                    let icolor = Math.round(color + direction * ((BGS/2 - Math.abs(ii-BGS/2))) * factor);
+                    group.colors.push("rgb(" + [icolor,icolor,icolor].join(",") + ")");
+                }
+            }
+            group.el.append($("<div></div>").addClass("bg-cell").css({left: x*80, top:y*80}));
+        }
+    }
+
+    return {
+        show: (idx) => {
+            Object.keys(groups).forEach((gid) => {
+                groups[gid].el[0].style.background = groups[gid].colors[idx];
+            });
+        }
+    }
+}
+
+
+class LevelSwitchSubloop {
+    constructor(state, nextLevel) {
+        this.state = state;
+        this.nextLevel = nextLevel;
+        var oldLevel = fieldSurface.clone();
+        let oldFacets = new Facets(generateCell(this.state.level.width, this.state.level.height, 5), this.state.level.width, this.state.level.height);
+        this.oldFaceted = new FacetedSurface(oldLevel, oldFacets, cell(1));
+        oldFacets.explode();
+        if (nextLevel) {
+            var levelInstance = new Level(nextLevel);
+            var newLevel = fieldSurface.clone();
+            newLevel.clear();
+            this.state._drawField(newLevel, levelInstance, new FigureDrawer(newLevel));
+            let newFacets = new Facets(generateCell(levelInstance.width, levelInstance.height, 5), levelInstance.width, levelInstance.height);
+            this.newFaceted = new FacetedSurface(newLevel, newFacets, cell(1));
+            this.noffsetX = 400-cell(levelInstance.width)/2;
+            this.noffsetY = 400-cell(levelInstance.height)/2;
+            newFacets.rise();
+        }
+    }
+
+    loop(ms) {
+        this.oldFaceted.tick();
+        if (this.newFaceted) this.newFaceted.tick();
+        if (!this.oldFaceted.inAction && (!this.newFaceted || !this.newFaceted.inAction)) {
+            this.state.startLevel(this.nextLevel);
+        }
+    }
+
+    draw(surface, offsetX, offsetY) {
+        surface.clear();
+        this.oldFaceted.draw(surface, offsetX, offsetY);
+
+        if (this.newFaceted) {
+            this.newFaceted.draw(surface, this.noffsetX, this.noffsetY);
         }
     }
 }
@@ -41,15 +94,28 @@ class GameState {
         this.bgPass = 0;
         this.bgChanged = true;
         this._drawer = new FigureDrawer(fieldSurface);
+        this._cssbg = createCssBackground();
+        this.highlightMovement = {};
     }
 
     startLevel(level) {
+        this._loopsQueue = [];
         this.subloop = null;
         this.level = new Level(level);
-        this.scenario = this.level.scenario(this);
+        this.scenarioCallback = this.level.scenarioCallback(this);
+        this.gamingLoop = this.loops.gaming(0, this.scenarioCallback)();
         this.next();
+        this.scenarioCallback();
         this.updateUi();
+        this._redraw = true;
         fieldSurface.clear();
+    }
+
+    showMessage(...args) {
+        this._loopsQueue.push(this.loops.message(...args));
+        if (this.subloop == this.gamingLoop) {
+            this.next();
+        }
     }
 
     get subloop() { return this._subloop;}
@@ -59,13 +125,18 @@ class GameState {
     }
 
     next() {
-        this.subloop = this.scenario.shift()();
+        let nextSubloopCtor = this._loopsQueue.shift();
+        this.subloop = nextSubloopCtor ? nextSubloopCtor() : this.gamingLoop;
+    }
+
+    animateLevelSwitch(nextLevel) {
+        this.subloop = new LevelSwitchSubloop(this, nextLevel);
     }
 
     win(nextLevel) {
         HeroState.savedPawns += this.level.figures.filter((f) => f.isAlive && f.figure == 'pawn').length;
         if (nextLevel) {
-            this.startLevel(nextLevel);
+            this.animateLevelSwitch(nextLevel);
         } else {
             console.log("win");
             this.subloop = this.loops.nothing(this);
@@ -86,8 +157,8 @@ class GameState {
 
     loop(ms) {
         this.bgPass += ms;
-        if (this.bgPass > 400) {
-            this.bgPass -= 400;
+        if (this.bgPass > 200) {
+            this.bgPass -= 200;
             this.bgIdx = (this.bgIdx + 1) % BGS;
             this.bgChanged = true;
         }
@@ -99,37 +170,55 @@ class GameState {
         if (this.subloop && this.subloop.click) this.subloop.click([pos[0] - this.offsetX, pos[1] - this.offsetY]);
     }
 
-    draw(surface) {
-        //draw background
-        if (this.bgChanged) {
-            surface.blit(bgSurfaces[this.bgIdx]);
-        }
+    move(pos) {
+        if (this.subloop && this.subloop.move) this.subloop.move([pos[0] - this.offsetX, pos[1] - this.offsetY]);
+        if (this.highlightMovementTo) $el.css({cursor: "pointer"}); else $el.css({cursor: "default"});
+    }
 
-        //draw interface
+    _drawField(surface, level, drawer) {
         //draw field
-        this.level.field.map.forEach((row, ri) => {
+        level.field.map.forEach((row, ri) => {
             row.forEach((fcell, ci) => {
                 var color = {
                     white: 'white',
                     black: 'gray',
                     false: 'black'
                 }[fcell];
+                graphics.rect(surface, color, new gamejs.Rect(cell(ci), cell(ri), CELL_SIZE*PIX_SIZE, CELL_SIZE*PIX_SIZE), 0);
                 if (this.phase == WAITING && this.controller.isHero()) {
                     let mv = this.controller.getPossibleFields().find(({x,y}) => x == ci && y == ri);
                     if (mv) {
-                        color = 'blue';
+                        let hl = this.highlightMovement[ci+"_"+ri] || 0.0;
                         if (mv.beats && mv.beats.length) {
-                            color = 'red';
+                            graphics.circle(surface, "#ff3333", [cell(ci+0.5), cell(ri+0.5)], pixel(8+hl*2));
+                        } else {
+                            graphics.circle(surface, "#3333ff", [cell(ci+0.5), cell(ri+0.5)], pixel(5+hl*2));
                         }
                     }
                 }
-                graphics.rect(fieldSurface, color, new gamejs.Rect(cell(ci), cell(ri), CELL_SIZE*PIX_SIZE, CELL_SIZE*PIX_SIZE), 0);
             });
         });
         //draw figures
-        this.level.figures.forEach((fig) => {
-            this._drawer.draw(fig);
+        level.figures.forEach((fig) => {
+            drawer.draw(fig);
         });
+    }
+
+    draw(surface) {
+        if (this.subloop && this.subloop.draw) {
+            this.subloop.draw(surface, this.offsetX, this.offsetY);
+            return;
+        }
+        if (this._redraw) {
+            surface.clear();
+        }
+        //draw background
+        if (this.bgChanged) {
+            this._cssbg.show(this.bgIdx);
+            //surface.blit(bgSurfaces[this.bgIdx]);
+        }
+        this._drawField(fieldSurface, this.level, this._drawer);
+
         //draw messages
         if (this.messageShown) {
             let [width, height] = MSG_FONT.size(this.messageShown);
@@ -163,11 +252,13 @@ class GameState {
             fieldSurface.blit(MSG_FONT.render(this.messageShown, colors.fg), [x+pad,y+pad-2]);
         }
         this.offsetX = 400-cell(this.level.width)/2;
-        this.offsetY = 40;
+        this.offsetY = 400-cell(this.level.height)/2;
         surface.blit(fieldSurface, [this.offsetX, this.offsetY]);
-        graphics.rect(surface, 'brown', new gamejs.Rect(400-cell(this.level.width)/2-2, 40-2, cell(this.level.width)+4, cell(this.level.height)+4), 4);
-
-        surface.blit(uiSurface, 0, 0);
+        graphics.rect(surface, 'brown', new gamejs.Rect(this.offsetX-2, this.offsetY-2, cell(this.level.width)+4, cell(this.level.height)+4), 4);
+        if (this._redraw) {
+            surface.blit(uiSurface);
+        }
+        this._redraw = false;
     }
 
 
@@ -190,14 +281,15 @@ var HeroState = {
 
 class Level {
     constructor(levelDescription) {
-        levelDescription.initState(HeroState);
+        this._levelState = {};
+        levelDescription.initState(HeroState, this._levelState);
         this.name = levelDescription.name;
         this.field = new Field(levelDescription.field);
         this.controllers = levelDescription.controllers({
             user: () => new UserController(this.field, HeroState),
             ai: (name, side, selector) => new AIController(name, this.field, selector, side)
         });
-        this.scenarioCtor = levelDescription.scenario;
+        this.scenarioCallbackCtor = levelDescription.scenarioCallback
     }
 
     get width() { return this.field.width; }
@@ -215,9 +307,10 @@ class Level {
         return this.figures.find((f) => f.isAlive && (figure === undefined || f.figure == figure) && (color === undefined || color == f.color))
     }
 
-    scenario(game) {
-        return this.scenarioCtor(this, game, game.loops);
+    scenarioCallback(game) {
+        return this.scenarioCallbackCtor(this, game, this._levelState);
     }
+
 }
 
 class Controller {
@@ -257,6 +350,10 @@ class UserController extends Controller {
         return this.possibleFields;
     }
 
+    canMoveTo(x,y) {
+        return this.possibleFields.find((f) => f.x == x && f.y == y);
+    }
+
     performMove(x,y) {
         let pm = this.possibleFields.find((p) => p.x == x && p.y == y);
         if (!pm) return false;
@@ -276,6 +373,7 @@ class UserController extends Controller {
 
     morph() {
         this._hero.morph(this.morphAfterMove);
+        HeroState.figure = this.morphAfterMove;
     }
 }
 
@@ -318,10 +416,12 @@ class AIController extends Controller {
 
 let MSG_FONT = new Font('italic 16px times new roman');
 let UI_FONT = new Font('18px helvetica');
+var $el;
 
 gamejs.ready(() => {
 
     var game = new GameState();
+    $el = $("canvas");
 
     gamejs.event.onKeyDown((e) => {
         game.pressed[e.key] = true;
@@ -331,6 +431,9 @@ gamejs.ready(() => {
     });
     gamejs.event.onMouseDown((e) => {
         game.click(e.pos);
+    });
+    gamejs.event.onMouseMotion((e) => {
+        game.move(e.pos);
     });
 
     gamejs.onTick((msDuration) => {
@@ -375,5 +478,23 @@ visual effects:
 - real introduction
 - localization?
 - performance
+
+- ai: when figure cannot move (pawn, for example)
+- ai: pawn reached end of field
+
+ */
+
+
+/*
+  level.facets = [{x:0,y:0,group:1}]
+
+  function explode(facets) {
+    ...
+    facet.x -=
+    facet.y -=
+    facet.scale -= 0.1;
+  }
+
+  ctx.drawImage(
 
  */

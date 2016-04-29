@@ -38,7 +38,7 @@ function getMovesFor({x,y,side,figure,isHero}, field, checks) {
         while (!finished) {
             addIfCanStep(field, tx, ty, side, isHero, figure, res, beats);
             if (isHero) {
-                finished = field.get(tx, ty) === null;
+                finished = field.get(tx, ty) === null || field.get(tx,ty).side === side;
             } else {
                 finished = !field.isEmpty(tx, ty);
             }
@@ -64,9 +64,13 @@ exports.Rules = {
                 if (isHero) { throw "!!!";}
                 var res = [];
                 let dy = color == 'white' ? -1 : +1;
-                addIfEmpty(field, x, y+dy, res);
-                addIfCanStep(field, x+1, y+dy, side, isHero, figure, res);
-                addIfCanStep(field, x-1, y+dy, side, isHero, figure, res);
+                addIfEmpty(field, x, y + dy, res);
+                if (!field.isEmpty(x + 1, y + dy)) {
+                    addIfCanStep(field, x + 1, y + dy, side, isHero, figure, res);
+                }
+                if (!field.isEmpty(x - 1, y + dy)) {
+                    addIfCanStep(field, x - 1, y + dy, side, isHero, figure, res);
+                }
                 return res;
             }
         },
