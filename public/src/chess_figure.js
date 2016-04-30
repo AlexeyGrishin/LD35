@@ -282,8 +282,10 @@ function brigther(clr) {
 }
 
 class FigureDrawer {
-    constructor(surface) {
+    constructor(surface, offsetX, offsetY) {
         this.surface = surface;
+        this.offsetX = offsetX || 0;
+        this.offsetY = offsetY || 0;
         this._cached = {};
     }
 
@@ -294,14 +296,14 @@ class FigureDrawer {
                 this._cached[key] = new gamejs.graphics.Surface([figure(1), figure(1)]);
                 cfigure._particles.forEach((p) => this.drawParticle(p, cfigure, this._cached[key]));
             }
-            this.surface.blit(this._cached[key], [figureInCell(cfigure.x), figureInCell(cfigure.y)]);
+            this.surface.blit(this._cached[key], [this.offsetX + figureInCell(cfigure.x), this.offsetY + figureInCell(cfigure.y)]);
             cfigure._particles.filter((p) => p.type == 'heart').forEach((p) => this.drawParticle(p, cfigure));
         } else {
             cfigure._particles.forEach((p) => this.drawParticle(p, cfigure));
         }
     }
 
-    drawParticle({x,y,type}, figure, mySurface) {
+    drawParticle({x,y,type}, figure, mySurface, offsetX, offsetY) {
         var clr = Colors.color[figure.color];
         if (type == 'border') {
             clr = Colors.border[figure.color];
@@ -310,17 +312,14 @@ class FigureDrawer {
             clr = brigther(clr);
         }
         if (!mySurface) {
-            graphics.rect(this.surface, clr, new gamejs.Rect(figureInCell(figure.x) + pixel(x), figureInCell(figure.y) + pixel(y), PIX_SIZE, PIX_SIZE), 0);
+            graphics.rect(this.surface, clr, new gamejs.Rect(this.offsetX + figureInCell(figure.x) + pixel(x), this.offsetY + figureInCell(figure.y) + pixel(y), PIX_SIZE, PIX_SIZE), 0);
         } else {
             graphics.rect(mySurface, clr, new gamejs.Rect(pixel(x), pixel(y), PIX_SIZE, PIX_SIZE), 0);
         }
         if (type == 'heart') {
             clr = 'rgb(' + figure._heartColor.toFixed(0) + ',0,0)';
             let r = PIX_SIZE*heartBeat[Math.floor(figure._heartPhase)]*(figure._heartColor/255);
-            if (isNaN(r)) {
-                console.log("r is NaN", figure._heartPhase, figure._heartColor,heartBeat[Math.floor(figure._heartPhase)]*(figure._heartColor/255) )
-            }
-            graphics.circle(this.surface, clr, [figureInCell(figure.x) + pixel(x) + r/2, figureInCell(figure.y) + pixel(y) + r/2], r, 0);
+            graphics.circle(this.surface, clr, [this.offsetX + figureInCell(figure.x) + pixel(x) + r/2, this.offsetY + figureInCell(figure.y) + pixel(y) + r/2], r, 0);
         }
     }
 }

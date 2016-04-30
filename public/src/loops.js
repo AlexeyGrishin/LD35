@@ -18,6 +18,10 @@ class MessageLoop {
 
     loop(ms) {
         this.passed += ms;
+        if (this.isShownCompletely() && this.passed > 3000) {
+            this.next();
+            return;
+        }
         if (!this.isShownCompletely() && this.passed > 100) {
             this.passed -= 100;
             let spIdx = this.state.message.indexOf(" ", this.state.messageShown.length+1);
@@ -96,6 +100,11 @@ class GamingLoop {
             }
             return;
         }
+        if (this.state.phase == MOVED && this.state.controller && this.state.controller.shallMorph()) {
+            this.state.controller.morph();
+            return;
+        }
+
         if (this.state.phase == MORPHING) {
             this.state.controller.morph();
             this.state.controller.recalculate();

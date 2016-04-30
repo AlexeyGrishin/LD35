@@ -10,7 +10,7 @@ function newArray(size, ctor) {
 
 function generateCell(width, height, maxGroupSize) {
     let matrix = newArray(height, () => new Array(width));
-    var free = newArray(width*height, (idx) => {return {x: idx % height, y: Math.floor(idx/height)}});
+    var free = newArray(width*height, (idx) => {return {x: idx % width, y: Math.floor(idx/width)}});
     var groupNr = 1, groupFilled = [];
     function neighbors(cells) {
         var nb = {}
@@ -94,7 +94,7 @@ for (var i = FCOUNT; i >= 0;i--) {
 }
 var exploding = [];
 let ECOUNT = 30;
-for (var i = 1; i <= ECOUNT;i++) {
+for (var i = 0; i <= ECOUNT;i++) {
     exploding.push(1 + 4*i/ECOUNT);
 }
 exploding.push(0);
@@ -183,6 +183,7 @@ class FacetedSurface {
 
     draw(surface, offsetX, offsetY) {
         this._facets.particles.forEach((p) => {
+            surface._context.globalAlpha = Math.min(1, p.view.factor);
             surface._context.drawImage(this._surface._canvas,
                 p.x*this._facetSize, p.y*this._facetSize, this._facetSize, this._facetSize,
                 offsetX + p.view.x*this._facetSize, offsetY + p.view.y*this._facetSize, this._facetSize*p.view.factor, this._facetSize*p.view.factor

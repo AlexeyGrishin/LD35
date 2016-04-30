@@ -7,7 +7,14 @@ function addIfEmpty(field, x, y, res) {
 }
 
 function addIfCanStep(field, x, y, side, isHero, figure, res, beats) {
-    if (field.canStepInto(x, y, side)) {
+    var canStepTrhoughPawns = false;
+    if (isHero) {
+        let c = field.get(x,y);
+        if (c && c.figure == 'pawn') {
+            canStepTrhoughPawns = true;
+        }
+    }
+    if (field.canStepInto(x, y, side) || canStepTrhoughPawns) {
         let r = {x,y};
         let c = field.get(x,y);
         if (c) {
@@ -38,7 +45,7 @@ function getMovesFor({x,y,side,figure,isHero}, field, checks) {
         while (!finished) {
             addIfCanStep(field, tx, ty, side, isHero, figure, res, beats);
             if (isHero) {
-                finished = field.get(tx, ty) === null || field.get(tx,ty).side === side;
+                finished = field.get(tx, ty) === null || (field.get(tx,ty).side === side && field.get(tx,ty).figure !== 'pawn');
             } else {
                 finished = !field.isEmpty(tx, ty);
             }

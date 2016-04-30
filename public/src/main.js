@@ -13,6 +13,8 @@ let {t} = require('./lang');
 let BGS = 50;
 var fieldSurface = new gamejs.graphics.Surface([800,800]);
 var uiSurface = new gamejs.graphics.Surface([800,800]);
+var startSurface = new gamejs.graphics.Surface([800,800]);
+var endSurface = new gamejs.graphics.Surface([800,800]);
 
 function createCssBackground() {
     let bg = $("#gjs-background");
@@ -45,39 +47,114 @@ function createCssBackground() {
     }
 }
 
-
-class LevelSwitchSubloop {
-    constructor(state, nextLevel) {
+class StartLoop {
+    constructor(state) {
         this.state = state;
-        this.nextLevel = nextLevel;
-        var oldLevel = fieldSurface.clone();
-        let oldFacets = new Facets(generateCell(this.state.level.width, this.state.level.height, 5), this.state.level.width, this.state.level.height);
-        this.oldFaceted = new FacetedSurface(oldLevel, oldFacets, cell(1));
-        oldFacets.explode();
-        if (nextLevel) {
-            var levelInstance = new Level(nextLevel);
-            var newLevel = fieldSurface.clone();
-            newLevel.clear();
-            this.state._drawField(newLevel, levelInstance, new FigureDrawer(newLevel));
-            let newFacets = new Facets(generateCell(levelInstance.width, levelInstance.height, 5), levelInstance.width, levelInstance.height);
-            this.newFaceted = new FacetedSurface(newLevel, newFacets, cell(1));
-            this.noffsetX = 400-cell(levelInstance.width)/2;
-            this.noffsetY = 400-cell(levelInstance.height)/2;
-            newFacets.rise();
-        }
+        this.drawer = new FigureDrawer(startSurface, 400-CELL_SIZE, 100);
+        this.fig = new Figure('pawn', {x:0, y:0, color: 'white'});
     }
 
     loop(ms) {
-        this.oldFaceted.tick();
+        this.fig.tick(ms);
+        if (this.state.pressed[gamejs.event.K_SPACE]) {
+            this.click();
+        }
+    }
+
+    click() {
+        this.state.startGame();
+    }
+
+    draw(surface) {
+        surface.clear();
+        startSurface.clear();
+        this.drawer.draw(this.fig);
+        center(startSurface, FONT_HEADER, "pawn story", "yellow", 200);
+        center(startSurface, FONT_HINT, "click or press any key to start", "white", 300);
+        surface.blit(startSurface);
+    }
+}
+
+let FONT_HEADER = new Font("36px monospace");
+let FONT_HINT = new Font("16px italic times new roman");
+
+
+function center(surface, font, text, color, y) {
+    let w = font.size(text)[0];
+    surface.blit(font.render(text, color), [400-w/2, y]);
+}
+
+
+function drawEndSurface() {
+    center(endSurface, FONT_HEADER, "the end", "yellow", 200);
+    center(endSurface, FONT_HINT, "Thanks for playing!", "white", 300);
+}
+
+
+class LevelSwitchSubloop {
+    constructor(state) {
+        this.state = state;
+    }
+
+    fromStartToLevel(nextLevel) {
+        let oldFacets = new Facets(generateCell(10, 10, 3), 10, 10);
+        this.oldFaceted = new FacetedSurface(startSurface, oldFacets, 80);
+        oldFacets.explode();
+        this._toLevel(nextLevel);
+    }
+
+    fromLevelToEnd(fromLevel) {
+        this._fromLevel(fromLevel);
+        drawEndSurface();
+        let newFacets = new Facets(generateCell(10, 10, 3), 10, 10);
+        this.newFaceted = new FacetedSurface(endSurface, newFacets, 80);
+        newFacets.rise();
+        this.nextLevel = null;
+        this.noffsetX = 0;
+        this.noffsetY = 0;
+    }
+
+    _toLevel(nextLevel) {
+        this.nextLevel = nextLevel;
+        var levelInstance = new Level(nextLevel);
+        var newLevel = fieldSurface.clone();
+        newLevel.clear();
+        this.state._drawField(newLevel, levelInstance, new FigureDrawer(newLevel));
+        let newFacets = new Facets(generateCell(levelInstance.width, levelInstance.height, 5), levelInstance.width, levelInstance.height);
+        this.newFaceted = new FacetedSurface(newLevel, newFacets, cell(1));
+        this.noffsetX = 400-cell(levelInstance.width)/2;
+        this.noffsetY = 400-cell(levelInstance.height)/2;
+        newFacets.rise();
+
+    }
+
+    _fromLevel(fromLevel) {
+        var oldLevel = fieldSurface.clone();
+        let oldFacets = new Facets(generateCell(fromLevel.width, fromLevel.height, 5), fromLevel.width, fromLevel.height);
+        this.oldFaceted = new FacetedSurface(oldLevel, oldFacets, cell(1));
+        oldFacets.explode();
+    }
+
+    fromLevelToLevel(fromLevel, nextLevel) {
+        this._fromLevel(fromLevel);
+        this._toLevel(nextLevel);
+    }
+
+
+
+    loop(ms) {
+        if (this.oldFaceted) this.oldFaceted.tick();
         if (this.newFaceted) this.newFaceted.tick();
-        if (!this.oldFaceted.inAction && (!this.newFaceted || !this.newFaceted.inAction)) {
+        if (!this.oldFaceted.inAction && (!this.newFaceted || !this.newFaceted.inAction) && this.nextLevel) {
             this.state.startLevel(this.nextLevel);
         }
     }
 
     draw(surface, offsetX, offsetY) {
         surface.clear();
-        this.oldFaceted.draw(surface, offsetX, offsetY);
+        if (this.oldFaceted) {
+            this.oldFaceted.draw(surface, offsetX, offsetY);
+        }
 
         if (this.newFaceted) {
             this.newFaceted.draw(surface, this.noffsetX, this.noffsetY);
@@ -88,8 +165,10 @@ class LevelSwitchSubloop {
 class GameState {
     constructor() {
         this.pressed = {};
+        this._loopsQueue = [];
         this.loops = loops(this);
-        this.startLevel(levels.level1);
+        //this.startLevel(levels.level1);
+        this.subloop = new StartLoop(this);
         this.bgIdx = 0;
         this.bgPass = 0;
         this.bgChanged = true;
@@ -98,11 +177,16 @@ class GameState {
         this.highlightMovement = {};
     }
 
+    startGame() {
+        this.subloop = new LevelSwitchSubloop(this, levels.firstLevel);
+        this.subloop.fromStartToLevel(levels.firstLevel);
+    }
+
     startLevel(level) {
         this._loopsQueue = [];
         this.subloop = null;
         this.level = new Level(level);
-        this.scenarioCallback = this.level.scenarioCallback(this);
+        this.scenarioCallback = this.level.scenarioCallback(this, this.loops);
         this.gamingLoop = this.loops.gaming(0, this.scenarioCallback)();
         this.next();
         this.scenarioCallback();
@@ -111,8 +195,8 @@ class GameState {
         fieldSurface.clear();
     }
 
-    showMessage(...args) {
-        this._loopsQueue.push(this.loops.message(...args));
+    enqueue(subloopCtor) {
+        this._loopsQueue.push(subloopCtor);
         if (this.subloop == this.gamingLoop) {
             this.next();
         }
@@ -122,6 +206,7 @@ class GameState {
 
     set subloop(val) {
         this._subloop = val;
+        console.log(val);
     }
 
     next() {
@@ -130,26 +215,34 @@ class GameState {
     }
 
     animateLevelSwitch(nextLevel) {
-        this.subloop = new LevelSwitchSubloop(this, nextLevel);
+        this.subloop = new LevelSwitchSubloop(this);
+        this.subloop.fromLevelToLevel(this.level, nextLevel);
+        return this.subloop;
     }
 
     win(nextLevel) {
-        HeroState.savedPawns += this.level.figures.filter((f) => f.isAlive && f.figure == 'pawn').length;
-        if (nextLevel) {
-            this.animateLevelSwitch(nextLevel);
-        } else {
-            console.log("win");
-            this.subloop = this.loops.nothing(this);
-        }
+        this.enqueue(() => {
+            HeroState.savedPawns += this.level.figures.filter((f) => f.isAlive && f.figure == 'pawn').length;
+            if (nextLevel) {
+                this.animateLevelSwitch(nextLevel);
+            } else {
+                this.subloop = new LevelSwitchSubloop(this);
+                this.subloop.fromLevelToEnd(this.level);
+            }
+            return this.subloop;
+        });
     }
 
     loose() {
-        console.log("lost");
-        this.subloop = this.loops.nothing(this);
+        this.enqueue(this.loops.message("You are dead..."));
+        this.enqueue(() => {
+            return this.animateLevelSwitch(this.level.description)
+        });
     }
 
     playAnimations(ms) {
         this.hasAnimations = false;
+        if (!this.level) return;
         this.level.field.figures.forEach((f) => {
             if (f.tick(ms)) this.hasAnimations = true;
         });
@@ -157,8 +250,8 @@ class GameState {
 
     loop(ms) {
         this.bgPass += ms;
-        if (this.bgPass > 200) {
-            this.bgPass -= 200;
+        if (this.bgPass > 100) {
+            this.bgPass -= 100;
             this.bgIdx = (this.bgIdx + 1) % BGS;
             this.bgChanged = true;
         }
@@ -205,17 +298,17 @@ class GameState {
     }
 
     draw(surface) {
+        //draw background
+        if (this.bgChanged) {
+            this._cssbg.show(this.bgIdx);
+        }
+        //draw special subloops
         if (this.subloop && this.subloop.draw) {
-            this.subloop.draw(surface, this.offsetX, this.offsetY);
+            this.subloop.draw(surface, this.offsetX || 0, this.offsetY || 0);
             return;
         }
         if (this._redraw) {
             surface.clear();
-        }
-        //draw background
-        if (this.bgChanged) {
-            this._cssbg.show(this.bgIdx);
-            //surface.blit(bgSurfaces[this.bgIdx]);
         }
         this._drawField(fieldSurface, this.level, this._drawer);
 
@@ -282,6 +375,7 @@ var HeroState = {
 class Level {
     constructor(levelDescription) {
         this._levelState = {};
+        this.description = levelDescription;
         levelDescription.initState(HeroState, this._levelState);
         this.name = levelDescription.name;
         this.field = new Field(levelDescription.field);
@@ -307,8 +401,8 @@ class Level {
         return this.figures.find((f) => f.isAlive && (figure === undefined || f.figure == figure) && (color === undefined || color == f.color))
     }
 
-    scenarioCallback(game) {
-        return this.scenarioCallbackCtor(this, game, this._levelState);
+    scenarioCallback(game, loops) {
+        return this.scenarioCallbackCtor(this, game, loops, this._levelState);
     }
 
 }
@@ -350,6 +444,8 @@ class UserController extends Controller {
         return this.possibleFields;
     }
 
+    shallMorph() { return false; }
+
     canMoveTo(x,y) {
         return this.possibleFields.find((f) => f.x == x && f.y == y);
     }
@@ -369,6 +465,10 @@ class UserController extends Controller {
 
     canMoveAgain() {
         return this.morphAfterMove && this._hero.isHero;
+    }
+
+    checkDone() {
+        return true;
     }
 
     morph() {
@@ -391,25 +491,38 @@ class AIController extends Controller {
     performMove() {
         let alive = this.figures.filter((f) => f.isAlive);
         if (alive.length == 0) return;
-        let done = alive.find((a) => {
-            let mvs = Rules[a.figure].getMoves(a, this.field);
-            let move = mvs.find((m) => m.beats && m.beats.length > 0);
-            if (move) {
-                this.moving = a;
-                this.possibleFields = mvs;
-                a.move(move);
-                return true;
-            }
-            return false;
-        });
-        if (!done) {
-            let f = alive[Math.floor(Math.random()*alive.length)];
-            let mvs = Rules[f.figure].getMoves(f, this.field);
-            let move = mvs.find((m) => m.beats && m.beats.length > 0) || mvs[0];
-            this.possibleFields = mvs;
-            this.moving = f;
-            f.move(move);
+        let toMove = alive.map((a) => {
+            let st = {
+                figure: a,
+                moves: Rules[a.figure].getMoves(a, this.field)
+            };
+            st.beat = st.moves.find((m) => m.beats && m.beats.length > 0);
+            return st;
+        }).filter((st) => st.moves.length > 0).sort((a,b) => {
+            return (!!b.beat ? 1 : 0) - (!!a.beat ? 1 : 0);
+        })[0];
+        if (toMove) {
+            this.moving = toMove.figure;
+            this.possibleFields = toMove.moves;
+            toMove.figure.move(toMove.beat || toMove.moves[0]);
         }
+    }
+
+    get pawnsToMorph() {
+        return this.figures.filter((f) => f.figure == 'pawn' && (
+            (f.color == 'white' && f.y == 0) || (f.color == 'black' && f.y == this.field.height-1)
+        ));
+
+    }
+
+    recalculate() {}
+
+    shallMorph() {
+        return this.pawnsToMorph.length > 0;
+    }
+
+    morph() {
+        this.pawnsToMorph.forEach((p) => p.morph('queen'));
     }
 
 }
@@ -461,40 +574,25 @@ visual effects:
     - facets
     - ruine for holes
     - blood
-- loosing screen
-- winning screen
++ loosing screen
++ winning screen
 - interface (score, level)
     + center level
     + dark background
     + level#, saved pawns
     - hint
     - highlight hero
-    - highlight moves
-- level switch (fade-in/fade-out, or something like that)
-    - idea: current level is exploding as broken mirror, next level appears under it
-    - idea2: current level is exploding like facets falling (but reversed), next level is under
+    + highlight moves
++ level switch (fade-in/fade-out, or something like that)
 + check condition after move
 + user alive-ness
-- real introduction
++ real introduction
 - localization?
-- performance
+* performance
 
-- ai: when figure cannot move (pawn, for example)
-- ai: pawn reached end of field
-
- */
-
-
-/*
-  level.facets = [{x:0,y:0,group:1}]
-
-  function explode(facets) {
-    ...
-    facet.x -=
-    facet.y -=
-    facet.scale -= 0.1;
-  }
-
-  ctx.drawImage(
++ ai: when figure cannot move (pawn, for example)
++ ai: pawn reached end of field
 
  */
+
+
