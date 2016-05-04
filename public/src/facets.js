@@ -1,4 +1,6 @@
 exports.Background = colorCell(generateCell(10, 10, 5), 0x22);
+let {cell, PIX_SIZE, CELL_SIZE} = require('./consts');
+let gamejs = require('gamejs');
 
 function newArray(size, ctor) {
     var ar = new Array(size);
@@ -144,7 +146,8 @@ class Facets {
                     p.view = {x:nx, y:ny, factor: f < 1 ? f : 1+Math.log(f)};
                 }
             });
-            if (particlesRem == 0) this._tick = null;
+            if (particlesRem == 0) { this._tick = null; this.done = true; }
+            return true;
         }
     }
 
@@ -159,7 +162,8 @@ class Facets {
     get inAction() { return this._tick != null; }
 
     tick() {
-        if (this._tick) this._tick();
+        if (this._tick) return this._tick();
+        return false;
     }
 
     get particles() { return this._particles; }
@@ -192,6 +196,49 @@ class FacetedSurface {
     }
 }
 
+class FacetedFloor {
+    constructor(color, x, y) {
+        this._color = color;
+        this._x = cell(x);
+        this._y = cell(y);
+    }
+
+    tick() {
+        return this._facets ? this._facets.tick() : false;
+    }
+
+    fall() {
+        this._facets = new Facets(generateCell(CELL_SIZE, CELL_SIZE, 50), CELL_SIZE, CELL_SIZE);
+        this._width = this._facets.width * PIX_SIZE;
+        this._height = this._facets.height * PIX_SIZE;
+        this._facets.fall();
+        return this;
+    }
+
+    get inAction() { return this._facets && this._facets.inAction; }
+    get done() { return this._facets && this._facets.done; }
+
+    draw(surface, offsetX, offsetY) {
+        if (this.inAction || this.done) {
+            gamejs.graphics.rect(surface, "black", new gamejs.Rect(
+                offsetX + this._x, offsetY + this._y, cell(1), cell(1)
+            ), 0);
+            if (!this.done) {
+                this._facets.particles.forEach((p) => {
+                    gamejs.graphics.rect(surface, "rgba(" + this._color + "," + this._color + "," + this._color + "," + Math.min(1, p.view.factor) + ")", new gamejs.Rect(
+                        offsetX + this._x + p.view.x * PIX_SIZE, offsetY + this._y + p.view.y * PIX_SIZE, PIX_SIZE * p.view.factor, PIX_SIZE * p.view.factor
+                    ), 0);
+                });
+            }
+        } else {
+            gamejs.graphics.rect(surface, "rgb(" + this._color + "," + this._color + "," + this._color + ")", new gamejs.Rect(
+                offsetX + this._x, offsetY + this._y, cell(1), cell(1)
+            ), 0);
+        }
+    }
+}
+
 exports.Facets = Facets;
 exports.FacetedSurface = FacetedSurface;
+exports.FacetedFloor = FacetedFloor;
 exports.generateCell = generateCell;

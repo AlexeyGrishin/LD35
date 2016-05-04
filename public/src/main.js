@@ -7,7 +7,7 @@ let {Font} = require('gamejs/font');
 let {figure, pixel, cell, figureInCell, PIX_SIZE, CELL_SIZE} = require('./consts');
 let {loops, WAITING} = require('./loops');
 let {levels} = require('./levels');
-let {Background, FacetedSurface, Facets, generateCell} = require('./facets');
+let {Background, FacetedSurface, Facets, FacetedFloor, generateCell} = require('./facets');
 let {t} = require('./lang');
 let {SoundWrapper} = require('./sound_wrapper');
 
@@ -20,7 +20,8 @@ var startSurface = new gamejs.graphics.Surface([800,800]);
 var endSurface = new gamejs.graphics.Surface([800,800]);
 
 window.debug = {
-    nomsg: false
+    nomsg: true,
+    skipstart: true
 };
 
 function createCssBackground() {
@@ -193,6 +194,7 @@ class GameState {
         this._drawer = new FigureDrawer(fieldSurface);
         this._cssbg = createCssBackground();
         this.highlightMovement = {};
+        if (debug.skipstart) { this.subloop = null; this.startLevel(levels.firstLevel); }
 
     }
 
@@ -278,6 +280,12 @@ class GameState {
         this.level.field.figures.forEach((f) => {
             if (f.tick(ms)) this.hasAnimations = true;
         });
+        this.level.map.forEach((row, ri) => {
+            row.forEach((fcell, ci) => {
+                if (fcell.tick()) this.hasAnimations = true;
+            });
+        });
+
     }
 
     loop(ms) {
@@ -302,14 +310,15 @@ class GameState {
 
     _drawField(surface, level, drawer) {
         //draw field
-        level.field.map.forEach((row, ri) => {
+        level.map.forEach((row, ri) => {
             row.forEach((fcell, ci) => {
-                var color = {
+                fcell.draw(surface, 0, 0);
+                /*var color = {
                     white: 'white',
                     black: 'gray',
                     false: 'black'
                 }[fcell];
-                graphics.rect(surface, color, new gamejs.Rect(cell(ci), cell(ri), CELL_SIZE*PIX_SIZE, CELL_SIZE*PIX_SIZE), 0);
+                graphics.rect(surface, color, new gamejs.Rect(cell(ci), cell(ri), CELL_SIZE*PIX_SIZE, CELL_SIZE*PIX_SIZE), 0);*/
                 if (this.phase == WAITING && this.controller.isHero()) {
                     let mv = this.controller.getPossibleFields().find(({x,y}) => x == ci && y == ri);
                     if (mv) {
@@ -418,7 +427,18 @@ class Level {
             user: () => new UserController(this.field, HeroState),
             ai: (name, side, selector) => new AIController(name, this.field, selector, side)
         });
-        this.scenarioCallbackCtor = levelDescription.scenarioCallback
+        this.scenarioCallbackCtor = levelDescription.scenarioCallback;
+        this.map = this.field.map.map((row, y) => {
+            return row.map((cell, x) => {
+                if (cell == 'white') {
+                    return new FacetedFloor(240, x, y);
+                } else if (cell == 'black') {
+                    return new FacetedFloor(128, x, y);
+                } else {
+                    return new FacetedFloor(196, x, y).fall();
+                }
+            })
+        })
     }
 
     get width() { return this.field.width; }
@@ -426,6 +446,11 @@ class Level {
 
     get figures() {
         return this.field.figures;
+    }
+
+    fall(x,y) {
+        this.map[y][x].fall();
+        this.field.map[y][x] = false;
     }
 
     get hero() {
