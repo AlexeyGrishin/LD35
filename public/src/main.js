@@ -4,17 +4,24 @@ let {Field} = require('./field');
 let {Figure, FigureDrawer} = require('./chess_figure');
 let {Rules} = require('./chess_rules');
 let {Font} = require('gamejs/font');
-let {figure, pixel, cell, figureInCell, PIX_SIZE, time, CELL_SIZE} = require('./consts');
+let {figure, pixel, cell, figureInCell, PIX_SIZE, CELL_SIZE} = require('./consts');
 let {loops, WAITING} = require('./loops');
 let {levels} = require('./levels');
 let {Background, FacetedSurface, Facets, generateCell} = require('./facets');
 let {t} = require('./lang');
+let {SoundWrapper} = require('./sound_wrapper');
+
+gamejs.preload(['./data/checkmate.ogg', './data/e2-e4.ogg']);
 
 let BGS = 50;
 var fieldSurface = new gamejs.graphics.Surface([800,800]);
 var uiSurface = new gamejs.graphics.Surface([800,800]);
 var startSurface = new gamejs.graphics.Surface([800,800]);
 var endSurface = new gamejs.graphics.Surface([800,800]);
+
+window.debug = {
+    nomsg: true
+};
 
 function createCssBackground() {
     let bg = $("#gjs-background");
@@ -52,6 +59,7 @@ class StartLoop {
         this.state = state;
         this.drawer = new FigureDrawer(startSurface, 400-CELL_SIZE, 100);
         this.fig = new Figure('pawn', {x:0, y:0, color: 'white'});
+        this.state.playSound('main');
     }
 
     loop(ms) {
@@ -71,6 +79,7 @@ class StartLoop {
         this.drawer.draw(this.fig);
         center(startSurface, FONT_HEADER, "pawn story", "yellow", 200);
         center(startSurface, FONT_HINT, "click or press any key to start", "white", 300);
+        center(startSurface, FONT_HINT, "'s' to toggle sound", "gray", 400);
         surface.blit(startSurface);
     }
 }
@@ -145,8 +154,13 @@ class LevelSwitchSubloop {
     loop(ms) {
         if (this.oldFaceted) this.oldFaceted.tick();
         if (this.newFaceted) this.newFaceted.tick();
-        if (!this.oldFaceted.inAction && (!this.newFaceted || !this.newFaceted.inAction) && this.nextLevel) {
-            this.state.startLevel(this.nextLevel);
+        if (!this.oldFaceted.inAction && (!this.newFaceted || !this.newFaceted.inAction)) {
+            if (this.nextLevel) {
+                this.state.playSound('battle');
+                this.state.startLevel(this.nextLevel);
+            } else {
+                this.state.playSound('main');
+            }
         }
     }
 
@@ -164,10 +178,14 @@ class LevelSwitchSubloop {
 
 class GameState {
     constructor() {
+        this._sound = localStorage.getItem('psgame.sound') !== "false";
+        this._audios = {
+            battle: new SoundWrapper('./data/e2-e4.ogg'),
+            main: new SoundWrapper('./data/checkmate.ogg')
+        };
         this.pressed = {};
         this._loopsQueue = [];
         this.loops = loops(this);
-        //this.startLevel(levels.level1);
         this.subloop = new StartLoop(this);
         this.bgIdx = 0;
         this.bgPass = 0;
@@ -175,6 +193,21 @@ class GameState {
         this._drawer = new FigureDrawer(fieldSurface);
         this._cssbg = createCssBackground();
         this.highlightMovement = {};
+
+    }
+
+    toggleSound() {
+        this._sound = !this._sound;
+        localStorage.setItem("psgame.sound", this._sound + "");
+        if (this._playing) this._playing.setVolume(this._sound ? 0.5 : 0);
+    }
+
+    playSound(name) {
+        if (this._playing == this._audios[name]) return;
+        if (this._playing) this._playing.stop();
+        this._playing = this._audios[name];
+        this._playing.setVolume(this._sound ? 0.5 : 0);
+        this._playing.play(true);
     }
 
     startGame() {
@@ -192,7 +225,6 @@ class GameState {
         this.scenarioCallback();
         this.updateUi();
         this._redraw = true;
-        fieldSurface.clear();
     }
 
     enqueue(subloopCtor) {
@@ -301,6 +333,9 @@ class GameState {
         //draw background
         if (this.bgChanged) {
             this._cssbg.show(this.bgIdx);
+        }
+        if (this._redraw) {
+            fieldSurface.clear();
         }
         //draw special subloops
         if (this.subloop && this.subloop.draw) {
@@ -538,6 +573,9 @@ gamejs.ready(() => {
 
     gamejs.event.onKeyDown((e) => {
         game.pressed[e.key] = true;
+        if (e.key === gamejs.event.K_s) {
+            game.toggleSound();
+        }
     });
     gamejs.event.onKeyUp((e) => {
         game.pressed[e.key] = false;
@@ -589,6 +627,8 @@ visual effects:
 + real introduction
 - localization?
 * performance
++ issue with figures moving away - seems to be lag, so ontick called with big ms value, so single change of coordinates is too big
+* issue with remaining shlafe
 
 + ai: when figure cannot move (pawn, for example)
 + ai: pawn reached end of field

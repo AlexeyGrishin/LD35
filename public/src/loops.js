@@ -1,7 +1,7 @@
 let t = require('lang').t;
 
 var gamejs = require('gamejs');
-let {figure, pixel, cell, figureInCell, PIX_SIZE, time, CELL_SIZE} = require('./consts');
+let {figure, pixel, cell, figureInCell, PIX_SIZE, CELL_SIZE} = require('./consts');
 
 class MessageLoop {
     constructor(state, message, figureSaying) {
@@ -17,6 +17,9 @@ class MessageLoop {
     }
 
     loop(ms) {
+        if (window.debug.nomsg) {
+            return this.next();
+        }
         this.passed += ms;
         if (this.isShownCompletely() && this.passed > 3000) {
             this.next();
@@ -44,7 +47,9 @@ class MessageLoop {
         this.state.message = null;
         this.state.messageShown = null;
         this.state.messageFigure = null;
+        this.state._redraw = true;
         this.state.next();
+
     }
 }
 

@@ -91,22 +91,26 @@ class Figure {
             }});
             return;
         }
-        let speed = this.isHero ? (Math.abs(tx-ox) + Math.abs(ty-oy) > 2 ? 0.6 : 0.4) : 0.5;
+        let speed = this.isHero ? (Math.abs(tx-ox) + Math.abs(ty-oy) > 2 ? 0.6 : 0.4) : 0.4;
         function isShlafe(p) { return p.type == 'shlafe';}
         function isntShlafe(p) { return p.type != 'shlafe';}
         this.view.action = (ms) => {
+            let cx = this.x;
+            let cy = this.y;
             this.x += speed*dx*time(ms);
             this.y += speed*dy*time(ms);
+            if (Math.abs(this.x - ox) > Math.abs(tx - ox) ) {this.x = tx;}
+            if (Math.abs(this.y - oy) > Math.abs(ty - oy) ) {this.y = ty;}
             this._particles.filter(isShlafe).forEach((p) => {
-                p.x -= dx*speed*cell(1);
-                p.y -= dy*speed*cell(1);
+                p.x -= (this.x-cx)*cell(1);
+                p.y -= (this.y-cy)*cell(1);
                 p.ts--;
             });
             this._particles = this._particles.filter((p) => isntShlafe(p) || p.ts > 0);
             var shlafe = [];
             if (drawShlafe) this._particles.filter(isntShlafe).forEach((p) => {
                 if (Math.random() < 0.2) {
-                    shlafe.push({x: p.x, y: p.y, type: 'shlafe', ts: 1+Math.floor(Math.random()*5)});
+                    shlafe.push({x: p.x, y: p.y, type: 'shlafe', ts: 1+Math.floor(Math.random()*10)});
                 }
             });
             this._particles = this._particles.concat(shlafe);
