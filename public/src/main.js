@@ -20,7 +20,7 @@ var startSurface = new gamejs.graphics.Surface([800,800]);
 var endSurface = new gamejs.graphics.Surface([800,800]);
 
 window.debug = {
-    nomsg: true
+    nomsg: false
 };
 
 function createCssBackground() {
