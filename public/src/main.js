@@ -10,50 +10,19 @@ let {levels} = require('./levels');
 let {Background, FacetedSurface, Facets, FacetedFloor, generateCell} = require('./facets');
 let {t} = require('./lang');
 let {SoundWrapper} = require('./sound_wrapper');
+let {BackgroundShader} = require('./bgshader');
 
-gamejs.preload(['./data/checkmate.ogg', './data/e2-e4.ogg']);
+gamejs.preload(['./data/checkmate.ogg', './data/e2-e4.ogg', './data/e7-e5.ogg']);
 
-let BGS = 50;
 var fieldSurface = new gamejs.graphics.Surface([800,800]);
 var uiSurface = new gamejs.graphics.Surface([800,800]);
 var startSurface = new gamejs.graphics.Surface([800,800]);
 var endSurface = new gamejs.graphics.Surface([800,800]);
 
 window.debug = {
-    nomsg: true,
-    skipstart: true
+    nomsg: false,
+    skipstart: false
 };
-
-function createCssBackground() {
-    let bg = $("#gjs-background");
-    var groups = {};
-    for (var x = 0; x < 10; x++) {
-        for (var y = 0; y < 10; y++) {
-            let bgcell = Background.find((p) => p.x == x && p.y == y);
-            let color = bgcell.color;
-            let direction = Math.random() < 0.5 ? -1 : 1;
-            let factor = 0.1;
-            let bootstrap = Math.floor((1 / factor) * Math.random());
-            let group = groups[bgcell.group] || (groups[bgcell.group] = {el: $("<div></div>").addClass("bg-group").attr("data-group", bgcell.group).appendTo(bg), colors: []});
-            if (group.colors.length == 0) {
-                for (var i = 0; i < BGS;i++) {
-                    let ii = (bootstrap + i) % BGS;
-                    let icolor = Math.round(color + direction * ((BGS/2 - Math.abs(ii-BGS/2))) * factor);
-                    group.colors.push("rgb(" + [icolor,icolor,icolor].join(",") + ")");
-                }
-            }
-            group.el.append($("<div></div>").addClass("bg-cell").css({left: x*80, top:y*80}));
-        }
-    }
-
-    return {
-        show: (idx) => {
-            Object.keys(groups).forEach((gid) => {
-                groups[gid].el[0].style.background = groups[gid].colors[idx];
-            });
-        }
-    }
-}
 
 class StartLoop {
     constructor(state) {
@@ -157,7 +126,6 @@ class LevelSwitchSubloop {
         if (this.newFaceted) this.newFaceted.tick();
         if (!this.oldFaceted.inAction && (!this.newFaceted || !this.newFaceted.inAction)) {
             if (this.nextLevel) {
-                this.state.playSound('battle');
                 this.state.startLevel(this.nextLevel);
             } else {
                 this.state.playSound('main');
@@ -182,19 +150,21 @@ class GameState {
         this._sound = localStorage.getItem('psgame.sound') !== "false";
         this._audios = {
             battle: new SoundWrapper('./data/e2-e4.ogg'),
+            battle2: new SoundWrapper('./data/e7-e5.ogg'),
             main: new SoundWrapper('./data/checkmate.ogg')
         };
         this.pressed = {};
         this._loopsQueue = [];
         this.loops = loops(this);
-        this.subloop = new StartLoop(this);
-        this.bgIdx = 0;
-        this.bgPass = 0;
-        this.bgChanged = true;
         this._drawer = new FigureDrawer(fieldSurface);
-        this._cssbg = createCssBackground();
+        BackgroundShader.init();
         this.highlightMovement = {};
-        if (debug.skipstart) { this.subloop = null; this.startLevel(levels.firstLevel); }
+        if (debug.skipstart) {
+            this.subloop = null;
+            this.startLevel(levels.firstLevel);
+        } else {
+            this.subloop = new StartLoop(this);
+        }
 
     }
 
@@ -218,6 +188,7 @@ class GameState {
     }
 
     startLevel(level) {
+        this.playSound(level.music || 'battle');
         this._loopsQueue = [];
         this.subloop = null;
         this.level = new Level(level);
@@ -275,6 +246,7 @@ class GameState {
     }
 
     playAnimations(ms) {
+        BackgroundShader.tick(ms);
         this.hasAnimations = false;
         if (!this.level) return;
         this.level.field.figures.forEach((f) => {
@@ -289,12 +261,6 @@ class GameState {
     }
 
     loop(ms) {
-        this.bgPass += ms;
-        if (this.bgPass > 100) {
-            this.bgPass -= 100;
-            this.bgIdx = (this.bgIdx + 1) % BGS;
-            this.bgChanged = true;
-        }
         this.playAnimations(ms);
         if (this.subloop && this.subloop.loop) this.subloop.loop(ms);
     }
@@ -313,12 +279,6 @@ class GameState {
         level.map.forEach((row, ri) => {
             row.forEach((fcell, ci) => {
                 fcell.draw(surface, 0, 0);
-                /*var color = {
-                    white: 'white',
-                    black: 'gray',
-                    false: 'black'
-                }[fcell];
-                graphics.rect(surface, color, new gamejs.Rect(cell(ci), cell(ri), CELL_SIZE*PIX_SIZE, CELL_SIZE*PIX_SIZE), 0);*/
                 if (this.phase == WAITING && this.controller.isHero()) {
                     let mv = this.controller.getPossibleFields().find(({x,y}) => x == ci && y == ri);
                     if (mv) {
@@ -340,9 +300,6 @@ class GameState {
 
     draw(surface) {
         //draw background
-        if (this.bgChanged) {
-            this._cssbg.show(this.bgIdx);
-        }
         if (this._redraw) {
             fieldSurface.clear();
         }
@@ -355,6 +312,7 @@ class GameState {
             surface.clear();
         }
         this._drawField(fieldSurface, this.level, this._drawer);
+        graphics.rect(fieldSurface, 'brown', new gamejs.Rect(1, 1, cell(this.level.width), cell(this.level.height)), 3);
 
         //draw messages
         if (this.messageShown) {
@@ -390,11 +348,8 @@ class GameState {
         }
         this.offsetX = 400-cell(this.level.width)/2;
         this.offsetY = 400-cell(this.level.height)/2;
-        surface.blit(fieldSurface, [this.offsetX, this.offsetY]);
-        graphics.rect(surface, 'brown', new gamejs.Rect(this.offsetX-2, this.offsetY-2, cell(this.level.width)+4, cell(this.level.height)+4), 4);
-        if (this._redraw) {
-            surface.blit(uiSurface);
-        }
+        surface.blit(fieldSurface, [this.offsetX, this.offsetY], null, "copy");
+        surface.blit(uiSurface);
         this._redraw = false;
     }
 
@@ -402,8 +357,11 @@ class GameState {
     updateUi() {
         uiSurface.clear();
         uiSurface.blit(UI_FONT.render(t(this.level.name), "yellow"), [5, 5]);
-        let s = t("Saved pawns: " + HeroState.savedPawns);
+        var s = t("Pawns saved: ") + HeroState.savedPawns;
         uiSurface.blit(UI_FONT.render(s, "yellow"), [800 - 5 - UI_FONT.size(s)[0], 5]);
+        s = t("Pawns killed: ") + HeroState.killedPawns;
+        uiSurface.blit(UI_FONT.render(s, "yellow"), [800 - 5 - UI_FONT.size(s)[0], 30]);
+        this._redraw = true;
     }
 
 
@@ -413,6 +371,7 @@ var HeroState = {
     figure: 'pawn',
     color: 'white',
     savedPawns: 0,
+    killedPawns: 0,
     rules: null//TODO
 };
 
@@ -425,7 +384,8 @@ class Level {
         this.field = new Field(levelDescription.field);
         this.controllers = levelDescription.controllers({
             user: () => new UserController(this.field, HeroState),
-            ai: (name, side, selector) => new AIController(name, this.field, selector, side)
+            ai: (name, side, selector) => new AIController(name, this.field, selector, side),
+            none: (name, side, selector) => new AIController(name, this.field, selector, side).none()
         });
         this.scenarioCallbackCtor = levelDescription.scenarioCallback;
         this.map = this.field.map.map((row, y) => {
@@ -435,7 +395,7 @@ class Level {
                 } else if (cell == 'black') {
                     return new FacetedFloor(128, x, y);
                 } else {
-                    return new FacetedFloor(196, x, y).fall();
+                    return new FacetedFloor(0, x, y);//.fall(30);
                 }
             })
         })
@@ -449,8 +409,8 @@ class Level {
     }
 
     fall(x,y) {
-        this.map[y][x].fall();
-        this.field.map[y][x] = false;
+        this.map[y-1][x-1].fall();
+        this.field.map[y-1][x-1] = false;
     }
 
     get hero() {
@@ -459,6 +419,10 @@ class Level {
 
     find(figure, color) {
         return this.figures.find((f) => f.isAlive && (figure === undefined || f.figure == figure) && (color === undefined || color == f.color))
+    }
+
+    count(figure, color) {
+        return this.figures.filter((f) => f.isAlive && (figure === undefined || f.figure == figure) && (color === undefined || color == f.color)).length;
     }
 
     scenarioCallback(game, loops) {
@@ -482,14 +446,28 @@ class Controller {
     }
 
     isHero() { return false; }
+
+    onKill(figure) {}
 }
 
 class UserController extends Controller {
     constructor(field, heroState) {
         super("Your", field);
+        this.state = heroState;
         this._hero = new Figure(heroState.figure, {side: "hero", color: heroState.color});
         field.assignHero(this._hero);
         this.figures = [this.hero];
+    }
+
+    onKill(figure) {
+        console.log(figure.figure);
+        if (figure.figure === 'pawn') {
+            this.state.killedPawns++;
+        }
+        if (figure.figure === 'king') {
+            figure.cancel();
+            figure.goingToBeSmasmed = true;
+        }
     }
 
     isHero() { return true; }
@@ -514,7 +492,7 @@ class UserController extends Controller {
         let pm = this.possibleFields.find((p) => p.x == x && p.y == y);
         if (!pm) return false;
         this._hero.move({x,y,drawShlafe:true});
-        if (pm.morphTo !== 'pawn') {
+        if (pm.morphTo !== 'pawn' && pm.morphTo !== 'king') {
             this.morphAfterMove = pm.morphTo;
         } else {
             this.morphAfterMove = null;
@@ -544,11 +522,17 @@ class AIController extends Controller {
         this.figures.forEach((f) => f.side = side);
     }
 
+    none() {
+        this._none = true;
+        return this;
+    }
+
     getPossibleFields() {
         return this.possibleFields;
     }
 
     performMove() {
+        if (this._none) return;
         let alive = this.figures.filter((f) => f.isAlive);
         if (alive.length == 0) return;
         let toMove = alive.map((a) => {
@@ -564,7 +548,7 @@ class AIController extends Controller {
         if (toMove) {
             this.moving = toMove.figure;
             this.possibleFields = toMove.moves;
-            toMove.figure.move(toMove.beat || toMove.moves[0]);
+            toMove.figure.move(toMove.beat || (toMove.figure.figure == 'king' ? toMove.moves[Math.floor(Math.random()*toMove.moves.length)] : toMove.moves[0]));
         }
     }
 
@@ -594,6 +578,7 @@ var $el;
 gamejs.ready(() => {
 
     var game = new GameState();
+    window.game = game;
     $el = $("canvas");
 
     gamejs.event.onKeyDown((e) => {
@@ -619,45 +604,4 @@ gamejs.ready(() => {
         game.draw(display);
     });
 });
-
-
-
-/*
-TODO: different rules on differnt stages
-
-visual effects:
-- floor - generate facets. ruine them in holes, fill with blood on murder
-- wave for target cell
-
-+ rules
-    + side --> color
-    + side == nr of controller
-    + alies/foes
-- floor
-    - facets
-    - ruine for holes
-    - blood
-+ loosing screen
-+ winning screen
-- interface (score, level)
-    + center level
-    + dark background
-    + level#, saved pawns
-    - hint
-    - highlight hero
-    + highlight moves
-+ level switch (fade-in/fade-out, or something like that)
-+ check condition after move
-+ user alive-ness
-+ real introduction
-- localization?
-* performance
-+ issue with figures moving away - seems to be lag, so ontick called with big ms value, so single change of coordinates is too big
-* issue with remaining shlafe
-
-+ ai: when figure cannot move (pawn, for example)
-+ ai: pawn reached end of field
-
- */
-
 

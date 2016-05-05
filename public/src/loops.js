@@ -89,21 +89,33 @@ class GamingLoop {
                 delete this.state.highlightMovement[xy];
             }
         }
-        if (this.state.hasAnimations) {
+
+        let checkKill = () => {
             if (this.state.controller) {
                 let mf = this.state.controller.moving;
                 let moves = this.state.controller.possibleFields;
-                for (let f of this.state.level.figures.filter((f) => f.isAlive)) {
-                    if (mf == f) continue;
-                    let t = moves.find((m) => m.x == f.x && m.y == f.y);
-                    let dx = f.x - mf.x;
-                    let dy = f.y - mf.y;
-                    if (t && t.beats && t.beats.indexOf(f) != -1 && (dx*dx+dy*dy) < 1) {
-                        f.smashed();
+                if (moves) {
+                    for (let f of this.state.level.figures.filter((f) => f.isAlive && !f.goingToBeSmasmed)) {
+                        if (mf == f) continue;
+                        let t = moves.find((m) => m.x == f.x && m.y == f.y);
+                        let dx = f.x - mf.x;
+                        let dy = f.y - mf.y;
+                        if (t && t.beats && t.beats.indexOf(f) != -1 && (dx * dx + dy * dy) < 1) {
+                            f.smashed();
+                            this.state.controller.onKill(f);
+                            this.state.updateUi();
+                            return true;
+                        }
                     }
                 }
             }
+        }
+        if (this.state.hasAnimations) {
+            checkKill();
             return;
+        }
+        if (this.state.phase == MOVED) {
+            if (checkKill()) return;
         }
         if (this.state.phase == MOVED && this.state.controller && this.state.controller.shallMorph()) {
             this.state.controller.morph();

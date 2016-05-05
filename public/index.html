@@ -21,6 +21,11 @@
             top: 0;
             left: 0;
         }
+
+        #gjs-background-canvas {
+            width: 800px;
+            height: 800px;
+        }
         #gjs-background .bg-cell {
             position: absolute;
             background: inherit;
@@ -56,7 +61,9 @@
          <br/>Loading...
         </div>
         <div id="gjs-container">
-            <div id="gjs-background"></div>
+            <div id="gjs-background">
+                <canvas id="gjs-background-canvas" width="800" height="800"></canvas>
+            </div>
             <canvas id="gjs-canvas"></canvas>
         </div>
 

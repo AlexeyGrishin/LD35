@@ -46,8 +46,8 @@ class Field {
         if (x < 0 || y < 0 || x >= this.width || y >= this.height) { return null; }
         let cell = this.map[y][x];
         if (!cell) return null;
-        let figureOnCell = this.figures.find((f) => f.x == x && f.y == y);
-        return figureOnCell && figureOnCell.isAlive ? figureOnCell : false;
+        let figureOnCell = this.figures.find((f) => f.x == x && f.y == y && f.isAlive);
+        return figureOnCell ? figureOnCell : false;
     }
 
     isEmpty(x,y) { return this.get(x,y) === false; }

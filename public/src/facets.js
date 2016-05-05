@@ -1,4 +1,49 @@
-exports.Background = colorCell(generateCell(10, 10, 5), 0x22);
+exports.Background = colorCell(generateCell(10, 10, 8), 0x22);
+function particlesToShader(particles) {
+    var lines = [];
+    for (var y = 0; y < 10; y++) {
+        var vals = [];
+        for (var x = 0; x < 10; x++) {
+            vals.push(particles.find((p) => p.x == x && p.y == y).group * (Math.random() > 0.5 ? -1 : 1));
+        }
+        lines.push(`COLORLINE(${y}, ${vals[0]}, ${vals[1]}, ${vals[2]}, ${vals[3]}, ${vals[4]});`);
+        lines.push(`COLORLINE2(${y}, ${vals[5]}, ${vals[6]}, ${vals[7]}, ${vals[8]}, ${vals[9]});`);
+    }
+    return lines.join("\n");
+}
+
+exports.BackgroundShader = `
+    precision mediump float;
+uniform float time;
+#define COLORLINE(y,c1,c2,c3,c4,c5) if (y1 == y) { if (x1 == 0) return c1;if (x1 == 1) return c2;if (x1 == 2) return c3;if (x1 == 3) return c4;if (x1 == 4) return c5; }
+#define COLORLINE2(y,c1,c2,c3,c4,c5) if (y1 == y) { if (x1 == 5) return c1;if (x1 == 6) return c2;if (x1 == 7) return c3;if (x1 == 8) return c4;if (x1 == 9) return c5; }
+
+int getColor(in vec4 coords) {
+    int x1 = int(floor(coords.x / 80.0));
+    int y1 = int(floor(coords.y / 80.0));
+    if (x1 > 10 || y1 > 10) return 0;
+    ${particlesToShader(exports.Background)}
+    return 0;
+}
+
+void main()
+{
+    int clr = getColor(gl_FragCoord);
+    if (clr == 0) {
+        gl_FragColor = vec4(0,0,0,0);
+    } else {
+        float ang;
+        if (clr > 0) {
+            ang = (float(clr) + time)/6.0;
+        }
+        else {
+            ang = (float(-clr) - time)/4.0;
+        }
+        float c = (44.0 + 11.0 + sin(ang)*11.0)/255.0;
+        gl_FragColor = vec4(c,c,c,1.0);
+    }
+}
+`;
 let {cell, PIX_SIZE, CELL_SIZE} = require('./consts');
 let gamejs = require('gamejs');
 
@@ -110,14 +155,15 @@ class Facets {
         this._tick = null;
     }
 
-    fall() {
-        this._perform(falling);
+    fall(delay) {
+        this._perform(falling, delay);
     }
 
-    _perform(falling) {
+    _perform(falling, delay) {
         var fall = {};
+        let overallDelay = Math.random() * (delay || 0);
         this._particles.forEach((p) => {
-            fall[p.group] = fall[p.group] || {delay: Math.random()*falling.length, ts: 0};
+            fall[p.group] = fall[p.group] || {delay: overallDelay + Math.random()*falling.length, ts: 0};
             p.delay = fall[p.group].delay;
             p.ts = fall[p.group].ts;
             p.view = {x: p.x, y: p.y, factor: falling[0]};
@@ -196,6 +242,8 @@ class FacetedSurface {
     }
 }
 
+let FloorFacets = JSON.stringify(generateCell(CELL_SIZE, CELL_SIZE, 50));
+
 class FacetedFloor {
     constructor(color, x, y) {
         this._color = color;
@@ -207,22 +255,25 @@ class FacetedFloor {
         return this._facets ? this._facets.tick() : false;
     }
 
-    fall() {
-        this._facets = new Facets(generateCell(CELL_SIZE, CELL_SIZE, 50), CELL_SIZE, CELL_SIZE);
+    fall(delay) {
+        this._facets = new Facets(JSON.parse(FloorFacets), CELL_SIZE, CELL_SIZE);
         this._width = this._facets.width * PIX_SIZE;
         this._height = this._facets.height * PIX_SIZE;
-        this._facets.fall();
+        this._facets.fall(delay);
         return this;
     }
 
     get inAction() { return this._facets && this._facets.inAction; }
     get done() { return this._facets && this._facets.done; }
 
+    //TODO: same
     draw(surface, offsetX, offsetY) {
         if (this.inAction || this.done) {
-            gamejs.graphics.rect(surface, "black", new gamejs.Rect(
+            let rect = new gamejs.Rect(
                 offsetX + this._x, offsetY + this._y, cell(1), cell(1)
-            ), 0);
+            );
+            surface.clear(rect);
+            //gamejs.graphics.rect(surface, "rgba(0,0,0,0)", rect, 0);
             if (!this.done) {
                 this._facets.particles.forEach((p) => {
                     gamejs.graphics.rect(surface, "rgba(" + this._color + "," + this._color + "," + this._color + "," + Math.min(1, p.view.factor) + ")", new gamejs.Rect(
@@ -231,7 +282,8 @@ class FacetedFloor {
                 });
             }
         } else {
-            gamejs.graphics.rect(surface, "rgb(" + this._color + "," + this._color + "," + this._color + ")", new gamejs.Rect(
+            var clr = this._color == 0 ? "rgba(0,0,0,0)" : "rgb(" + this._color + "," + this._color + "," + this._color + ")";
+            gamejs.graphics.rect(surface, clr, new gamejs.Rect(
                 offsetX + this._x, offsetY + this._y, cell(1), cell(1)
             ), 0);
         }

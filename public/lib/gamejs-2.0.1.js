@@ -2751,7 +2751,7 @@ Surface.prototype.blit = function(src, dest, area, compositeOperation) {
 		// no target coords
 		if (arguments.length === 1) {
 			this._context.drawImage(src._canvas, 0, 0);
-		} else if (arguments.length === 2) {
+		} else if (arguments.length === 2 || area == null) {
 			// target coords as array
 			if (dest instanceof Array) {
 				this._context.drawImage(src._canvas, dest[0], dest[1]);
@@ -3023,9 +3023,14 @@ exports.circle = function(surface, color, pos, radius, width) {
    }
 
    var ctx = surface.context;
-   ctx.save();
+   //ctx.save();
    ctx.beginPath();
-   ctx.strokeStyle = ctx.fillStyle = color;
+   if (width) {
+      ctx.strokeStyle = color;
+   } else {
+      ctx.fillStyle = color;
+   }
+   //ctx.strokeStyle = ctx.fillStyle = color;
    ctx.lineWidth = width || 1;
    ctx.arc(pos[0], pos[1], radius, 0, 2*Math.PI, true);
    if (width === undefined || width === 0) {
@@ -3033,7 +3038,7 @@ exports.circle = function(surface, color, pos, radius, width) {
    } else {
       ctx.stroke();
    }
-   ctx.restore();
+   //ctx.restore();
    return;
 };
 
@@ -3045,16 +3050,18 @@ exports.circle = function(surface, color, pos, radius, width) {
  */
 exports.rect = function(surface, color, rect, width) {
    var ctx =surface.context;
-   ctx.save();
-   ctx.beginPath();
-   ctx.strokeStyle = ctx.fillStyle = color;
+   //ctx.save();
+   //ctx.beginPath();
+   //ctx.strokeStyle = ctx.fillStyle = color;
    if (isNaN(width) || width === 0) {
+      ctx.fillStyle = color;
       ctx.fillRect(rect.left, rect.top, rect.width, rect.height);
    } else {
+	  ctx.strokeStyle = color;
       ctx.lineWidth = width || 1;
       ctx.strokeRect(rect.left, rect.top, rect.width, rect.height);
    }
-   ctx.restore();
+   //ctx.restore();
 };
 
 /**

@@ -144,6 +144,16 @@ class Figure {
         return this.color == 'hero';
     }
 
+    cancel() {
+        this.isAlive = true;
+        this.view.action = null;
+        this._particles.forEach((p) => {
+            p.a = 0;
+            p.v = 0;
+            p.ax = 0;
+            p.vx = 0;
+        });
+    }
     smashed() {
         this.isAlive = false;
         this._particles.forEach((p) => {
@@ -307,7 +317,8 @@ class FigureDrawer {
         }
     }
 
-    drawParticle({x,y,type}, figure, mySurface, offsetX, offsetY) {
+    //TODO: beginPath/rect/stroke/fill instead
+    drawParticle({x,y,type}, figure, mySurface) {
         var clr = Colors.color[figure.color];
         if (type == 'border') {
             clr = Colors.border[figure.color];
